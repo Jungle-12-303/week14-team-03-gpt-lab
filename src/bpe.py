@@ -43,7 +43,18 @@ class BPETokenizer:
         1. 특수 토큰 4개를 고정 ID 0~3에 등록합니다.
         2. byte 0~255를 ID 4~259에 bytes([byte_value]) 형태로 등록합니다.
         """
-        raise NotImplementedError("_init_special_tokens를 구현하세요.")
+        for token, idx in SPECIAL_IDS.items():
+            self.id_to_token[idx] = token
+            self.token_to_id[token] = idx
+
+        # NUM_BYTES = 256 
+        # BYTE_OFFSET = 4
+        for byte_value in range(NUM_BYTES):
+            token_id = BYTE_OFFSET + byte_value
+            byte_token = bytes([byte_value])
+
+            self.id_to_token[token_id] = byte_token
+            self.token_to_id[byte_token] = token_id
 
     def get_pad_id(self):
         """padding 토큰 ID."""
@@ -71,8 +82,63 @@ class BPETokenizer:
         - 새 token ID를 만들고, 시퀀스의 해당 pair를 새 ID로 치환합니다.
         - `self.merges`, `self.id_to_token`, `self.token_to_id`를 갱신합니다.
         """
-        raise NotImplementedError("BPETokenizer.train을 구현하세요.")
+        # 0. 기존 vocab/merge 초기화
+        self._init_special_tokens()
+        self.merges = []
 
+        # 1. corpus를 UTF-8 byte로 바꾸고, byte token ID sequence로 변환
+        ids = []
+
+        for byte in corpus.encode("utf-8"):
+            token_id = BYTE_OFFSET + byte
+            ids.append(token_id)
+
+        # 2. vocab_size에 도달할 때까지 merge 반복
+        while len(self.id_to_token) < self.vocab_size:
+        # sequence 길이가 2보다 작으면 이웃 pair가 없음
+            if len(ids) < 2:
+                break
+
+        # 3. 이웃 token pair 빈도 세기
+            pair_counts = {}
+
+            for i in range(len(ids) - 1):
+                pair = (ids[i], ids[i + 1])
+
+                if pair not in pair_counts:
+                    pair_counts[pair] = 0
+
+                pair_counts[pair] += 1
+
+        # pair가 없으면 중단
+            if not pair_counts:
+                break
+
+            # 4. 가장 자주 나온 pair 선택
+            best_pair = max(pair_counts, key=pair_counts.get)
+
+            # 5. 새 token ID 만들기
+            new_id = len(self.id_to_token)
+
+            # 6. vocab과 merge rule 갱신
+            self.id_to_token[new_id] = best_pair
+            self.token_to_id[best_pair] = new_id
+            self.merges.append(best_pair)
+
+            # 7. sequence에서 best_pair를 new_id로 치환
+            new_ids = []
+            i = 0
+
+            while i < len(ids):
+                if i < len(ids) - 1 and (ids[i], ids[i + 1]) == best_pair:
+                    new_ids.append(new_id)
+                    i += 2
+                else:
+                    new_ids.append(ids[i])
+                    i += 1
+
+            ids = new_ids
+            
     def save(self, path: str | Path):
         """
         TODO: vocabulary와 merge rule을 JSON 파일로 저장합니다.
