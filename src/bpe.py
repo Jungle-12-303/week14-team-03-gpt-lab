@@ -37,13 +37,29 @@ class BPETokenizer:
         self.token_to_id = {}
         self.merges = []
 
-    def _init_special_tokens(self):
-        """
-        TODO:
-        1. 특수 토큰 4개를 고정 ID 0~3에 등록합니다.
-        2. byte 0~255를 ID 4~259에 bytes([byte_value]) 형태로 등록합니다.
-        """
-        raise NotImplementedError("_init_special_tokens를 구현하세요.")
+        def _init_special_tokens(self):
+            """
+            DONE: 특수 토큰 및 바이트를 단어사전에 저장
+            1. 특수 토큰 4개를 고정 ID 0~3에 등록합니다.
+            2. byte 0~255를 ID 4~259에 bytes([byte_value]) 형태로 등록합니다.
+            """
+            # 1. 특수 토큰 4개를 고정 ID 0~3에 등록합니다.
+            #   권장 ID 배치:
+            #     - 0~3: <pad>, <unk>, <bos>, <eos>
+            
+            self.id_to_token[0] = PAD_TOKEN
+            self.id_to_token[1] = UNK_TOKEN
+            self.id_to_token[2] = BOS_TOKEN
+            self.id_to_token[3] = EOS_TOKEN
+            
+            # 2. byte 0~255를 ID 4~259에 bytes([byte_value]) 형태로 등록합니다.
+            for i in range (0, 256):
+                self.id_to_token[i+4] = bytes([i])
+            
+            # +) token_to_id 에도 저장
+            self.token_to_id = { s:i for i, s in self.id_to_token.items() }
+        
+
 
     def get_pad_id(self):
         """padding 토큰 ID."""
