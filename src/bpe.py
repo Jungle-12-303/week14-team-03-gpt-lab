@@ -47,7 +47,7 @@ class BPETokenizer:
             self.id_to_token[idx] = token
             self.token_to_id[token] = idx
 
-        # NUM_BYTES = 256 
+        # NUM_BYTES = 256
         # BYTE_OFFSET = 4
         for byte_value in range(NUM_BYTES):
             token_id = BYTE_OFFSET + byte_value
@@ -83,7 +83,7 @@ class BPETokenizer:
             else:
                 new_ids.append(ids[i])
                 i += 1
-        
+
         return new_ids
 
     def expand_token(self, token_id: int) -> bytes:
@@ -158,7 +158,7 @@ class BPETokenizer:
 
             # 7. sequence에서 best_pair를 new_id로 치환
             ids = self._merge_rule_helper(ids, best_pair, new_id)
-        
+
     def save(self, path: str | Path):
         """
         TODO: vocabulary와 merge rule을 JSON 파일로 저장합니다.
@@ -198,11 +198,11 @@ class BPETokenizer:
             new_token_id = self.token_to_id[pair]
 
             ids = self._merge_rule_helper(ids, pair, new_token_id)
-        # 4. 필요하면 bos/eos 추가 
+        # 4. 필요하면 bos/eos 추가
         if add_bos_eos:
             ids = [self.get_bos_id()] + ids + [self.get_eos_id()]
 
-        return ids 
+        return ids
 
 
     def decode(self, ids: list[int], skip_special: bool = True) -> str:
@@ -215,14 +215,14 @@ class BPETokenizer:
         """
         byte_chunks = []
 
-        for token_id in ids: 
+        for token_id in ids:
             token = self.id_to_token[token_id]
 
             if isinstance(token, str):
                 if skip_special:
                     continue
                 byte_chunks.append(token.encode("utf-8"))
-                continue     
-                
+                continue
+
             byte_chunks.append(self.expand_token(token_id))
         return b"".join(byte_chunks).decode("utf-8")
