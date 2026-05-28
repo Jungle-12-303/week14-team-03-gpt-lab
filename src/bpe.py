@@ -204,16 +204,17 @@ class BPETokenizer:
         byte_id_list =  [BYTE_OFFSET + byte_value for byte_value in text.encode("utf-8")]
 
         #next_id를 260으로 둔다.
-        next_id = BYTE_OFFSET + NUM_BYTES
+        # next_id = BYTE_OFFSET + NUM_BYTES
 
         #self.merges를 순서대로 돈다.
         for merge_pair in self.merges:
 
+            new_id = self.token_to_id[merge_pair]
             #byte_id_list에서 merge_pair을 next_id로 치환
             #ex) (112,115) , (260, 123), (261, 36)
-            byte_id_list = self.replace_pair(byte_id_list, merge_pair, next_id)
+            byte_id_list = self.replace_pair(byte_id_list, merge_pair, new_id)
 
-            next_id += 1
+            new_id += 1
 
         #add_bos_eos가 True면 앞뒤에 bos/eos를 붙인다.
         if(add_bos_eos):
