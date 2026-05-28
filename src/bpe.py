@@ -223,14 +223,15 @@ class BPETokenizer:
         # 바이트
         token_dict = data["id_to_token"] # 바이트, 문자, 튜플 등 형태 섞여있음
         for token_id, token_data in token_dict.items():
+            token_type = token_data["type"]
             token = token_data["value"]
-            if token["type"] == "bytes":
+            if token_type == "bytes":
                 self.id_to_token[int(token_id)] = bytes(token)
             
-            elif token["type"] == "str":
+            elif token_type == "str":
                 self.id_to_token[int(token_id)] = token
             
-            elif token["type"] == "tuple":
+            elif token_type == "tuple":
                 self.id_to_token[int(token_id)] = tuple(token)
 
         # 토큰 > ID 역변환
