@@ -8,7 +8,7 @@ UTF-8 byte-level BPE 토크나이저 과제 템플릿.
 """
 
 from pathlib import Path
-
+import json # json 저장을 위한 라이브러리
 
 PAD_TOKEN = "<pad>"
 UNK_TOKEN = "<unk>"
@@ -33,13 +33,13 @@ class BPETokenizer:
 
     def __init__(self, vocab_size: int = 3000):
         self.vocab_size = vocab_size
-        self.id_to_token = {}
-        self.token_to_id = {}
-        self.merges = []
+        self.id_to_token = {} # 값(value)의 타입이 섞여있을 수 있음 (e.g. "<pad>", b"\x00", (101, 101) => 순서대로 문자열, 바이트, 튜플 타입)
+        self.token_to_id = {} # key의 타입이 섞여있을 수 있음
+        self.merges = [] # token ID 쌍(튜플 형태)을 순서대로 저장하는 배열 
 
     def _init_special_tokens(self):
         """
-        TODO:
+        DONE: 특수 토큰 및 바이트를 단어사전에 저장
         1. 특수 토큰 4개를 고정 ID 0~3에 등록합니다.
         2. byte 0~255를 ID 4~259에 bytes([byte_value]) 형태로 등록합니다.
         """
@@ -103,7 +103,7 @@ class BPETokenizer:
 
     def train(self, corpus: str):
         """
-        TODO: 코퍼스에서 BPE merge rule과 vocabulary를 학습합니다.
+        DONE: 코퍼스에서 BPE merge rule과 vocabulary를 학습합니다.
 
         구현 힌트:
         - `corpus.encode("utf-8")`로 byte ID 시퀀스를 만듭니다.
@@ -165,13 +165,77 @@ class BPETokenizer:
 
         bytes와 tuple은 JSON에 바로 저장할 수 없으므로 type 정보를 함께 저장하세요.
         """
-        raise NotImplementedError("BPETokenizer.save를 구현하세요.")
+          
+        # merge rule? BPE가 학습한 “어떤 token 쌍을 하나의 새 token으로 합칠지”에 대한 규칙
+            # 예를 들어 merges = [(101, 101), (260, 102), (103, 104)] 라면,
+            # 1번째 merge: (101, 101)을 합친다
+            # 2번째 merge: (260, 102)를 합친다
+            # 3번째 merge: (103, 104)를 합친다 는 의미
+        
+        merge_rules = [[a, b] for a, b in self.merges]
+        data = {
+            "vocab_size": self.vocab_size,
+            "merges": merge_rules,
+            "id_to_token": { },
+            # token_to_id는 굳이 넣지 않는다! > id_to_token에서 다시 만들 수 있는 역방향 인덱스이기 때문   
+        }
+        
+        # JSON에 넣을 토큰을 타입별로 저장 방식 다르게 진행
+        for token_id, token in self.id_to_token.items():
+            if isinstance(token, bytes):
+                data["id_to_token"][str(token_id)] = {
+                    "type": "bytes",
+                    "value": list(token)
+                }
+            elif isinstance(token, str):
+                data["id_to_token"][str(token_id)] = {
+                    "type": "str",
+                    "value": token
+                }
+            elif isinstance(token, tuple):
+                data["id_to_token"][str(token_id)] = {
+                    "type": "tuple",
+                    "value": list(token)
+                }
+        
+        # path에 JSON 파일로 저장
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        
 
     def load(self, path: str | Path):
         """
         TODO: save()로 저장한 JSON 파일을 읽어 vocabulary와 merge rule을 복원합니다.
         """
-        raise NotImplementedError("BPETokenizer.load를 구현하세요.")
+        # 초기화
+        self.id_to_token = {} 
+        self.token_to_id = {}
+        
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f) # 파일 열기
+        
+        # 저장된 json에서 
+        self.vocab_size = data["vocab_size"]
+        merge_rules = data["merges"]
+        self.merges = [(a, b) for a, b in merge_rules]
+        
+        # 토큰 복원
+        # 바이트
+        token_dict = data["id_to_token"] # 바이트, 문자, 튜플 등 형태 섞여있음
+        for token_id, token_data in token_dict.items():
+            token_type = token_data["type"]
+            token = token_data["value"]
+            if token_type == "bytes":
+                self.id_to_token[int(token_id)] = bytes(token)
+            
+            elif token_type == "str":
+                self.id_to_token[int(token_id)] = token
+            
+            elif token_type == "tuple":
+                self.id_to_token[int(token_id)] = tuple(token)
+
+        # 토큰 > ID 역변환
+        self.token_to_id = { s:i for i, s in self.id_to_token.items() }
 
     def encode(self, text: str, add_bos_eos: bool = False) -> list[int]:
         # 기존 vocab을 사용해서 ID로 변환
