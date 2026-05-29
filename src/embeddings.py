@@ -18,16 +18,18 @@ class InputEmbedding(nn.Module):
 
     def __init__(
         self,
-        vocab_size: int,
-        emb_dim: int,
+        vocab_size: int, # 사전 크기
+        emb_dim: int, # 임베딩 크기
         context_length: int,
         drop_rate: float = 0.1,
     ):
         super().__init__()
         self.emb_dim = emb_dim
         self.context_length = context_length
-        # TODO: token_embedding, position_embedding, dropout을 정의하세요.
-        raise NotImplementedError("InputEmbedding.__init__을 구현하세요.")
+        # DONE: token_embedding, position_embedding, dropout을 정의하세요.
+        self.token_embedding = nn.Embedding(vocab_size, emb_dim) # (사전 크기 X 임베딩 차원)만큼 토큰 임베딩
+        self.position_embedding = nn.Embedding(context_length, emb_dim) # (컨텍스트 길이 X 임베딩 차원)만큼 위치 임베딩
+        self.dropout = nn.Dropout(p=drop_rate)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -39,4 +41,14 @@ class InputEmbedding(nn.Module):
         Returns:
             (batch_size, seq_len, emb_dim)
         """
-        raise NotImplementedError("InputEmbedding.forward를 구현하세요.")
+        seq_len = x.size(1) # 또는 seq_len = x.shape[1] 도 가능
+
+        tok_emb = self.token_embedding(x)
+
+        positions = torch.arange(seq_len, device=x.device) # device=x.device: positions 텐서를 x와 같은 장치에 생성
+        pos_emb = self.position_embedding(positions)
+
+        x = tok_emb + pos_emb
+        x = self.dropout(x)
+
+        return x
