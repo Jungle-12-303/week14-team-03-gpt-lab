@@ -26,7 +26,7 @@ class InputEmbedding(nn.Module):
         super().__init__()
         self.emb_dim = emb_dim
         self.context_length = context_length
-        
+
         self.token_embedding = nn.Embedding(vocab_size, emb_dim)
         self.position_embedding = nn.Embedding(context_length, emb_dim)
         self.dropout = nn.Dropout(p=drop_rate)
@@ -93,7 +93,7 @@ class InputEmbedding(nn.Module):
         pos_emb = self.position_embedding(positions)
 
         x = tok_emb + pos_emb
-        # 합쳐진값 0 으로 만들어서 과적합 줄임 
+        # 합쳐진값 0 으로 만들어서 과적합 줄임
         x = self.dropout(x)
 
         return x

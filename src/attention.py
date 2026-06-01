@@ -17,7 +17,7 @@ class MultiHeadAttention(nn.Module):
     - attention weight와 V를 곱한 뒤 head를 다시 합치기
     """
     """
-    Attention 에 목표 
+    Attention 에 목표
     각 토큰이 자기보다 이전에 나온 토큰들 중 무엇을 얼마나 참고할지 계산해서, 문맥이 반영된 새 벡터를 만드는 것
 
     ## x: (B, T, C)는 입력 hidden state입니다.
@@ -33,8 +33,8 @@ class MultiHeadAttention(nn.Module):
 
     def __init__(
         self,
-        d_model: int,   # 입력 임베딩 차원 
-        n_heads: int,   # attention head 개수, 이게 multiheadattention 할때 softmax(q @ k.v)) * v = 뉴런, 이렇게 나온 뉴련의 개수인가 
+        d_model: int,   # 입력 임베딩 차원
+        n_heads: int,   # attention head 개수, 이게 multiheadattention 할때 softmax(q @ k.v)) * v = 뉴런, 이렇게 나온 뉴련의 개수인가
         drop_rate: float = 0.1,
         qkv_bias: bool = False,
     ):
@@ -47,9 +47,9 @@ class MultiHeadAttention(nn.Module):
 
         # TODO: qkv projection, output projection, dropout을 정의하세요.
         self.qkv = nn.Linear(d_model, 3 * d_model, bias=qkv_bias) # 입력 hidden state에서 Q/K/V를 한 번에 만드는 선형층입니다.
-        
+
         self.out_proj = nn.Linear(d_model, d_model) # 여러 head를 합친 뒤 다시 d_model 차원으로 섞는 출력 projection입니다.
-        
+
         self.attn_dropout = nn.Dropout(drop_rate) # attention 확률에 적용하는 dropout입니다.
         self.out_dropout = nn.Dropout(drop_rate) # 최종 projection 결과에 적용하는 dropout입니다.
 
@@ -74,7 +74,7 @@ class MultiHeadAttention(nn.Module):
 
         # x에서 Q, K, V를 만들고 마지막 차원을 기준으로 3개로 나눕니다.
         qkv = self.qkv(x)
-        
+
         q, k, v = qkv.chunk(3, dim=-1)
 
         # 각 tensor를 (B, T, C)에서 (B, n_heads, T, head_dim)으로 바꿉니다.

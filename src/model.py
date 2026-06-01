@@ -29,15 +29,14 @@ class LayerNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: 마지막 차원의 평균과 분산으로 정규화한 뒤 gamma/beta를 적용합니다."""
-        
-        mean = x.mean(dim=-1, keepdim = True) 
-        # x는 현재 토큰의 벡터값 ex) [2, 4, 6]
-        # mean은 그 벡터 값들의 평균값 = 4
+
+        mean = x.mean(dim=-1, keepdim = True)
+        # x는 현재 토큰의 벡터값 ex) [-2, 0, 2]
+        # mean은 그 벡터 값들의 평균값 = 0
         # 표준편차 = 바로 값들의 일반적인 퍼짐 크기
         var = x.var(dim=-1, keepdim=True, unbiased=False) # 분산
         x_norm = (x - mean) / torch.sqrt(var + self.eps) # 정규화된 값 = 평균에서 얼마나 떨어져 있는지 / 표준편차
         return self.gamma * x_norm + self.beta
-    
 
 class GELU(nn.Module):
     """GPT FeedForward에서 사용하는 GELU 활성화 함수."""
@@ -66,7 +65,7 @@ class FeedForward(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: FeedForward 네트워크를 통과시킵니다."""
         return self.layers(x)
-    
+
 
 
 class TransformerBlock(nn.Module):
@@ -118,7 +117,7 @@ class GPTModel(nn.Module):
         self.config = config
         # TODO: embedding, blocks, final layernorm, lm_head를 정의하세요.
         # raise NotImplementedError("GPTModel.__init__을 구현하세요.")
-        
+
         self.embedding = InputEmbedding(
             vocab_size=config["vocab_size"],
             emb_dim=config["emb_dim"],
@@ -144,10 +143,10 @@ class GPTModel(nn.Module):
             config["emb_dim"],
             config["vocab_size"],
             bias=False,
-        )        
+        )
         """
         logits는 입력 문맥을 보고, 각 위치마다 vocab_size개의 token 후보에 대해 만든 점수표
-        
+
         TODO: logits를 만들고, targets가 있으면 cross entropy loss도 함께 반환합니다.
 
         Returns:
@@ -166,14 +165,14 @@ class GPTModel(nn.Module):
 
         if targets is None:
             return logits
-        
+
         loss = F.cross_entropy(
             logits.reshape(-1, logits.size(-1)),
             targets.reshape(-1),
         )
 
         return loss, logits
-        
+
 def generate_text_simple(
     model: GPTModel,
     idx: torch.Tensor,
@@ -190,4 +189,3 @@ def generate_text_simple(
             idx = torch.cat((idx, next_id), dim=1)
 
     return idx
-    
