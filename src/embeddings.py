@@ -18,38 +18,38 @@ class InputEmbedding(nn.Module):
 
     def __init__(
         self,
-        vocab_size: int, # 사전 크기
-        emb_dim: int, # 임베딩 크기
+        vocab_size: int,
+        emb_dim: int,
         context_length: int,
         drop_rate: float = 0.1,
     ):
         super().__init__()
         self.emb_dim = emb_dim
         self.context_length = context_length
-        # DONE: token_embedding, position_embedding, dropout을 정의하세요.
-        self.token_embedding = nn.Embedding(vocab_size, emb_dim) # (사전 크기 X 임베딩 차원)만큼 토큰 임베딩
-        self.position_embedding = nn.Embedding(context_length, emb_dim) # (컨텍스트 길이 X 임베딩 차원)만큼 위치 임베딩
+        
+        self.token_embedding = nn.Embedding(vocab_size, emb_dim)
+        self.position_embedding = nn.Embedding(context_length, emb_dim)
         self.dropout = nn.Dropout(p=drop_rate)
 
     """
-    ex) 
+    ex)
     x = [
         [10, 20, 30],
         [40, 50, 60].
     ]
     emb_dim = 3 (벡터 차원의 개수 3)
-    token_emb: (2, 3, 3)    
-    tokenN_vector = [N-1, N-2, N-3] 
+    token_emb: (2, 3, 3)
+    tokenN_vector = [N-1, N-2, N-3]
     [
         [
-            token10_vector, 
-            token20_vector, 
-            token40_vector, 
+            token10_vector,
+            token20_vector,
+            token30_vector,
         ],
         [
-            token40_vector, 
-            token50_vector, 
-            token60_vector, 
+            token40_vector,
+            token50_vector,
+            token60_vector,
         ]
     ]
 
@@ -59,7 +59,7 @@ class InputEmbedding(nn.Module):
         position1_vector,
         position2_vector,
     ]
-    
+
     첫 번째 샘플:
     token10_vector + position0_vector
     token20_vector + position1_vector
@@ -69,30 +69,31 @@ class InputEmbedding(nn.Module):
     token40_vector + position0_vector
     token50_vector + position1_vector
     token60_vector + position2_vector
-    
+
     token10_vector = [0.20, 0.50, -0.10]
     position0_vector = [0.01, -0.03, 0.04]
     ->[0.21, 0.47, -0.06]
     """
-    
-    
+
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        TODO: token embedding과 position embedding을 더한 뒤 dropout을 적용합니다.        
+        TODO: token embedding과 position embedding을 더한 뒤 dropout을 적용합니다.
         Args:
             x: (batch_size, seq_len) token IDs
 
         Returns:
             (batch_size, seq_len, emb_dim)
         """
-        seq_len = x.size(1) # 또는 seq_len = x.shape[1] 도 가능
+        seq_len = x.size(1)
 
         tok_emb = self.token_embedding(x)
 
-        positions = torch.arange(seq_len, device=x.device) # device=x.device: positions 텐서를 x와 같은 장치에 생성
+        positions = torch.arange(seq_len, device=x.device)
         pos_emb = self.position_embedding(positions)
 
         x = tok_emb + pos_emb
+        # 합쳐진값 0 으로 만들어서 과적합 줄임 
         x = self.dropout(x)
 
         return x
