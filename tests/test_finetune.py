@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 import torch
+from torch.utils.data import DataLoader
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -165,3 +166,49 @@ class TestSentimentTrainEval:
 
         assert callable(train_epoch_sentiment)
         assert callable(evaluate_sentiment)
+
+    def test_train_eval_save_sentiment_history(self):
+        """results_path 지정 시 train/val loss와 accuracy가 같은 JSON history에 누적되는지 확인한다."""
+        from model import GPTModel
+        from finetune import (
+            GPTForSequenceClassification,
+            ReviewSentimentDataset,
+            train_epoch_sentiment,
+            evaluate_sentiment,
+        )
+
+        data = [
+            {"text": "정말 좋았다", "label": 1},
+            {"text": "별로였다", "label": 0},
+        ]
+        dataset = ReviewSentimentDataset(data, DummyTokenizer(), max_length=8)
+        loader = DataLoader(dataset, batch_size=2, shuffle=False)
+        backbone = GPTModel(GPT_CONFIG_TINY)
+        model = GPTForSequenceClassification(backbone, num_labels=2)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+        device = torch.device("cpu")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            results_path = Path(tmp) / "sentiment_history.json"
+            train_epoch_sentiment(
+                model,
+                loader,
+                optimizer,
+                device,
+                epoch=1,
+                results_path=results_path,
+            )
+            evaluate_sentiment(
+                model,
+                loader,
+                device,
+                split="val",
+                epoch=1,
+                results_path=results_path,
+            )
+
+            payload = json.loads(results_path.read_text(encoding="utf-8"))
+
+        assert payload["task"] == "sentiment_classification"
+        assert [item["split"] for item in payload["history"]] == ["train", "val"]
+        assert {"loss", "accuracy", "num_examples"} <= set(payload["history"][0])

@@ -35,6 +35,10 @@ htmlcov/
 *.pth
 checkpoints/
 
+# 학습 결과 로그
+results/
+training_results/
+
 # 과제 안내문 (로컬/Notion 전용, repo에 미포함)
 notion/
 

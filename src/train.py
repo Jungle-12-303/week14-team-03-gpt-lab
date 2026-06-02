@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """GPT 사전 학습 유틸리티 과제 템플릿."""
 
+from pathlib import Path
+import json
+
 import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
@@ -9,6 +12,18 @@ try:
     from .model import GPTModel
 except ImportError:
     from model import GPTModel
+
+
+def save_training_results(path: str | Path, results: dict) -> None:
+    """학습 중간/최종 결과를 JSON 파일로 저장합니다."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # loss, 생성 샘플, 설정값은 REPORT.md에 옮겨 적어야 하므로 파일로 남겨 둡니다.
+    # ensure_ascii=False를 쓰면 한국어 생성 샘플이 \uXXXX 형태로 깨져 보이지 않습니다.
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+
 
 # 모델이 얼마나 틀렸는지 숫자로 계산하는 함수
 # batch 1개 loss
@@ -221,7 +236,7 @@ def generate_and_print_sample(
     context_size: int = 256,
     temperature: float = 0.8,
     top_k: int | None = 40,
-) -> None:
+) -> str:
     """TODO: start_context를 encode하고 generate 후 decode하여 출력합니다."""
     model.eval()
 
@@ -242,6 +257,7 @@ def generate_and_print_sample(
 
     generated_text = tokenizer.decode(generated_ids[0].tolist())
     print(generated_text)
+    return generated_text
     # raise NotImplementedError("generate_and_print_sample을 구현하세요.")
 
 
@@ -259,11 +275,24 @@ def train_model(
     ckpt_freq: int | None = None,
     start_epoch: int = 0,
     global_step: int = 0,
+    results_path: str | Path | None = None,
 ) -> list[float]:
     """TODO: 사전 학습 루프를 구현하고 epoch별 train loss 리스트를 반환합니다."""
     model.to(device)
 
     train_losses = []
+    history = {
+        "task": "pretraining",
+        "model_config": dict(model.config),
+        "num_epochs": num_epochs,
+        "eval_freq": eval_freq,
+        "eval_iter": eval_iter,
+        "start_context": start_context,
+        "train_losses": train_losses,
+        "epoch_history": [],
+        "eval_history": [],
+        "last_global_step": global_step,
+    }
 
     for epoch in range(start_epoch, start_epoch + num_epochs):
         model.train()
@@ -310,12 +339,28 @@ def train_model(
                     f"train loss {train_loss:.4f}, val loss {val_loss:.4f}"
                 )
 
-                generate_and_print_sample(
+                # 생성 샘플도 REPORT.md에 필요하므로 print만 하지 않고 history에도 저장합니다.
+                # context_size는 모델의 position embedding 길이를 넘으면 안 되므로 config 값을 사용합니다.
+                generated_text = generate_and_print_sample(
                     model=model,
                     tokenizer=tokenizer,
                     device=device,
                     start_context=start_context,
+                    context_size=model.config.get("context_length", 256),
                 )
+
+                history["eval_history"].append({
+                    "epoch": epoch + 1,
+                    "global_step": global_step,
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
+                    "generated_sample": generated_text,
+                })
+                history["last_global_step"] = global_step
+
+                # Colab 런타임이 끊겨도 마지막 평가 결과를 잃지 않도록 매 평가마다 저장합니다.
+                if results_path is not None:
+                    save_training_results(results_path, history)
 
                 model.train()
 
@@ -330,6 +375,16 @@ def train_model(
 
         avg_epoch_loss = epoch_loss / batch_count if batch_count > 0 else float("nan")
         train_losses.append(avg_epoch_loss)
+        history["epoch_history"].append({
+            "epoch": epoch + 1,
+            "train_loss": avg_epoch_loss,
+            "global_step": global_step,
+        })
+        history["last_global_step"] = global_step
+
+        # eval_freq가 커서 중간 평가가 한 번도 없어도 epoch 평균 loss는 저장합니다.
+        if results_path is not None:
+            save_training_results(results_path, history)
 
     return train_losses
     # raise NotImplementedError("train_model을 구현하세요.")

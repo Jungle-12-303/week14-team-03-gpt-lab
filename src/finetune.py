@@ -16,6 +16,28 @@ except ImportError:
     from model import GPTModel
 
 
+def append_sentiment_result(path: str | Path, result: dict) -> None:
+    """감성 분류 train/eval 결과를 JSON history 파일에 누적 저장합니다."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            history = json.load(f)
+    else:
+        history = {
+            "task": "sentiment_classification",
+            "history": [],
+        }
+
+    # train_epoch_sentiment와 evaluate_sentiment를 번갈아 호출해도 같은 파일에 순서대로 쌓입니다.
+    # 예: {"split": "train", ...}, {"split": "val", ...}, {"split": "test", ...}
+    history["history"].append(result)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+
 def make_sentiment_dataset(
     train_tsv_path: str | Path,
     test_tsv_path: str | Path | None = None,
@@ -192,6 +214,9 @@ def train_epoch_sentiment(
     train_loader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
+    *,
+    epoch: int | None = None,
+    results_path: str | Path | None = None,
 ) -> tuple[float, float]:
     """TODO: 감성 분류 모델을 1 epoch 훈련하고 (평균 loss, accuracy)를 반환합니다."""
     model.train()
@@ -221,6 +246,18 @@ def train_epoch_sentiment(
     avg_loss = total_loss / total_count if total_count > 0 else float("nan")
     accuracy = total_correct / total_count if total_count > 0 else float("nan")
 
+    if results_path is not None:
+        append_sentiment_result(
+            results_path,
+            {
+                "split": "train",
+                "epoch": epoch,
+                "loss": avg_loss,
+                "accuracy": accuracy,
+                "num_examples": total_count,
+            },
+        )
+
     return avg_loss, accuracy
     # raise NotImplementedError("train_epoch_sentiment를 구현하세요.")
 
@@ -229,6 +266,10 @@ def evaluate_sentiment(
     model: GPTForSequenceClassification,
     data_loader,
     device: torch.device,
+    *,
+    split: str = "val",
+    epoch: int | None = None,
+    results_path: str | Path | None = None,
 ) -> tuple[float, float]:
     """TODO: 감성 분류 모델을 평가하고 (평균 loss, accuracy)를 반환합니다."""
     model.eval()
@@ -253,6 +294,18 @@ def evaluate_sentiment(
 
     avg_loss = total_loss / total_count if total_count > 0 else float("nan")
     accuracy = total_correct / total_count if total_count > 0 else float("nan")
+
+    if results_path is not None:
+        append_sentiment_result(
+            results_path,
+            {
+                "split": split,
+                "epoch": epoch,
+                "loss": avg_loss,
+                "accuracy": accuracy,
+                "num_examples": total_count,
+            },
+        )
 
     return avg_loss, accuracy
     # raise NotImplementedError("evaluate_sentiment를 구현하세요.")
