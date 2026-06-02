@@ -125,3 +125,14 @@ class TestBPETrain:
             assert len(tok.id_to_token) <= 300
         except NotImplementedError:
             pytest.fail("train 미구현")
+
+    def test_train_stops_when_best_pair_appears_once(self):
+        """반복 pair가 없으면 단발 pair를 새 merge 토큰으로 만들지 않는지 확인한다."""
+        tok = BPETokenizer(vocab_size=300)
+        try:
+            tok.train("abc")
+        except NotImplementedError:
+            pytest.fail("train 미구현")
+
+        assert len(tok.id_to_token) == BYTE_OFFSET + NUM_BYTES
+        assert tok.merges == []

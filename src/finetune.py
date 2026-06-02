@@ -29,6 +29,14 @@ def make_sentiment_dataset(
     반환 형식:
         [{"text": "리뷰", "label": 0 또는 1}, ...]
     """
+    def write_jsonl(path: str | Path, rows: list[dict]) -> None:
+        """감성 분류 제출 형식인 JSONL로 한 줄에 샘플 하나씩 저장합니다."""
+        with open(path, "w", encoding="utf-8") as f:
+            for row in rows:
+                # json.dump로 전체 배열을 저장하면 요구서의 .jsonl 형식과 달라집니다.
+                # JSONL은 큰 데이터도 줄 단위로 읽기 쉬우므로 train/val/test 파일에 적합합니다.
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
     def read_nsmc_tsv(path: str | Path) -> list[dict]:
         rows = []
 
@@ -73,12 +81,11 @@ def make_sentiment_dataset(
         output_dir.mkdir(parents=True, exist_ok=True)
 
         for name, data in [
-            ("train.json", train_data),
-            ("val.json", val_data),
-            ("test.json", test_data),
+            ("nsmc_sentiment_train.jsonl", train_data),
+            ("nsmc_sentiment_val.jsonl", val_data),
+            ("nsmc_sentiment_test.jsonl", test_data),
         ]:
-            with open(output_dir / name, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            write_jsonl(output_dir / name, data)
 
     return train_data, val_data, test_data
     # raise NotImplementedError("make_sentiment_dataset을 구현하세요.")

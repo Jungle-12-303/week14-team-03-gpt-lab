@@ -85,6 +85,29 @@ class TestCalcLossLoader:
             avg_loss = avg_loss.item()
         assert avg_loss >= 0
 
+    def test_calc_loss_loader_restores_original_model_mode(self):
+        """평가 loss 계산 뒤에도 호출 전 train/eval 모드가 유지되는지 확인한다."""
+        from model import GPTModel
+        from train import calc_loss_loader
+        from dataset import create_dataloader
+
+        loader = create_dataloader(
+            list(range(200)),
+            context_length=16,
+            batch_size=4,
+            shuffle=False,
+        )
+        model = GPTModel(GPT_CONFIG_SMALL)
+        device = torch.device("cpu")
+
+        model.train()
+        calc_loss_loader(loader, model, device, num_batches=1)
+        assert model.training is True
+
+        model.eval()
+        calc_loss_loader(loader, model, device, num_batches=1)
+        assert model.training is False
+
 
 # =============================================================================
 # save_checkpoint / load_checkpoint

@@ -6,6 +6,7 @@
 
 import sys
 import tempfile
+import json
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,49 @@ class TestMakeSentimentDataset:
         assert len(test_data) == 1
         assert set(train_data[0].keys()) == {"text", "label"}
         assert train_data[0]["label"] in {0, 1}
+
+    def test_make_sentiment_dataset_writes_required_jsonl_files(self):
+        """output_dir 지정 시 과제 요구 파일명과 JSONL 형식으로 저장하는지 확인한다."""
+        from finetune import make_sentiment_dataset
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            train_path = tmp_path / "ratings_train.txt"
+            test_path = tmp_path / "ratings_test.txt"
+            output_dir = tmp_path / "prepared"
+
+            train_path.write_text(
+                "id\tdocument\tlabel\n"
+                "1\t정말 좋았다\t1\n"
+                "2\t별로였다\t0\n"
+                "3\t다시 보고 싶다\t1\n",
+                encoding="utf-8",
+            )
+            test_path.write_text(
+                "id\tdocument\tlabel\n"
+                "4\t괜찮았다\t1\n",
+                encoding="utf-8",
+            )
+
+            make_sentiment_dataset(
+                train_path,
+                test_path,
+                val_ratio=0.34,
+                seed=42,
+                output_dir=output_dir,
+            )
+
+            train_jsonl = output_dir / "nsmc_sentiment_train.jsonl"
+            val_jsonl = output_dir / "nsmc_sentiment_val.jsonl"
+            test_jsonl = output_dir / "nsmc_sentiment_test.jsonl"
+
+            assert train_jsonl.exists()
+            assert val_jsonl.exists()
+            assert test_jsonl.exists()
+            assert not (output_dir / "train.json").exists()
+
+            first_line = train_jsonl.read_text(encoding="utf-8").splitlines()[0]
+            assert set(json.loads(first_line).keys()) == {"text", "label"}
 
 
 class TestReviewSentimentDataset:

@@ -53,7 +53,7 @@ def calc_loss_loader(
     #data_loader가 비어 있으면 평균을 낼 수 없으므로 nan 반환
     if len(data_loader) == 0:
         return float("nan")
-    
+
     #num_batches가 None이면 전체 batch를 사용
     if num_batches is None:
         num_batches = len(data_loader)
@@ -61,25 +61,40 @@ def calc_loss_loader(
         #요청한 batch 수가 실제 batch 수보다 크면 실제 batch 수까지만 사용
         num_batches = min(num_batches, len(data_loader))
 
+    if num_batches == 0:
+        return float("nan")
+
+    # 평가용 loss는 dropout 같은 학습 전용 랜덤 동작을 끈 상태에서 재야 합니다.
+    # 다만 이 함수는 학습 루프 중간에서도 호출되므로, 호출자가 원래 train 모드였는지
+    # eval 모드였는지를 기억해 두었다가 마지막에 그대로 복구합니다.
+    was_training = model.training
+    model.eval()
+
     total_loss = 0.0
 
-    #loss 계산만 할 것이므로 gradient 계산을 끈다
-    with torch.no_grad():
-        for i, (input_batch, target_batch) in enumerate(data_loader):
+    try:
+        # loss 값만 확인하므로 gradient 그래프를 만들 필요가 없습니다.
+        # torch.no_grad()를 사용하면 메모리를 덜 쓰고 평가 속도도 조금 빨라집니다.
+        with torch.no_grad():
+            for i, (input_batch, target_batch) in enumerate(data_loader):
 
-            #num_batches개 까지만 계산
-            if i >= num_batches:
-                break
+                # num_batches개까지만 계산해 긴 validation loader도 빠르게 샘플 평가할 수 있게 합니다.
+                if i >= num_batches:
+                    break
 
-            loss = calc_loss_batch(
-                input_batch = input_batch,
-                target_batch = target_batch,
-                model = model,
-                device = device,
-            )
+                loss = calc_loss_batch(
+                    input_batch=input_batch,
+                    target_batch=target_batch,
+                    model=model,
+                    device=device,
+                )
 
-            #loss는 tensor이므로 float 값만 꺼내서 더한다
-            total_loss += loss.item()
+                # loss는 scalar Tensor이므로 Python float 값만 꺼내 평균 계산에 사용합니다.
+                total_loss += loss.item()
+    finally:
+        # 평가 호출이 끝난 뒤 모델 모드를 원래 상태로 되돌립니다.
+        # train_model() 안에서 validation을 잰 뒤 학습을 이어갈 때 dropout이 다시 켜져야 합니다.
+        model.train(was_training)
 
     #batch별 loss의 평균 반환
     return total_loss / num_batches
