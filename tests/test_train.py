@@ -46,7 +46,7 @@ class SafeTokenizer:
     def encode(self, text):
         return [1, 2, 3]
 
-    def decode(self, ids, skip_special=True):
+    def decode(self, ids, skip_special=True, errors="strict"):
         return "tokens:" + ",".join(str(token_id) for token_id in ids)
 
     def get_eos_id(self):

@@ -255,7 +255,9 @@ def generate_and_print_sample(
         eos_id=eos_id,
     )
 
-    generated_text = tokenizer.decode(generated_ids[0].tolist())
+    # 학습 초반 모델은 UTF-8로 복원할 수 없는 byte 조합을 생성할 수 있습니다.
+    # 생성 샘플 출력 때문에 학습과 loss 저장이 멈추지 않도록 이 경로에서만 replace를 사용합니다.
+    generated_text = tokenizer.decode(generated_ids[0].tolist(), errors="replace")
     print(generated_text)
     return generated_text
     # raise NotImplementedError("generate_and_print_sample을 구현하세요.")

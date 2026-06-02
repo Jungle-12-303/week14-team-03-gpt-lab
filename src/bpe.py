@@ -239,13 +239,20 @@ class BPETokenizer:
 
         return ids
 
-    def decode(self, ids: list[int], skip_special: bool = True) -> str:
+    def decode(
+        self,
+        ids: list[int],
+        skip_special: bool = True,
+        errors: str = "strict",
+    ) -> str:
         """
         TODO: token ID 리스트를 문자열로 복원합니다.
 
         주의:
         - merge token은 원본 byte token까지 재귀적으로 펼칩니다.
         - byte를 하나씩 decode하지 말고, 마지막에 `bytes(...).decode("utf-8")`를 한 번만 호출합니다.
+        - errors="strict"는 잘못된 UTF-8 byte 조합을 오류로 잡고,
+          errors="replace"는 학습 중 생성 샘플의 깨진 byte를 �로 대체합니다.
         """
         byte_chunks = []
 
@@ -260,4 +267,4 @@ class BPETokenizer:
 
             byte_chunks.append(self.expand_token(token_id))
 
-        return b"".join(byte_chunks).decode("utf-8")
+        return b"".join(byte_chunks).decode("utf-8", errors=errors)
