@@ -8,6 +8,7 @@ UTF-8 byte-level BPE 토크나이저 과제 템플릿.
 """
 
 from pathlib import Path
+import json
 
 
 PAD_TOKEN = "<pad>"
@@ -39,11 +40,20 @@ class BPETokenizer:
 
     def _init_special_tokens(self):
         """
-        TODO:
+        DONE: 특수 토큰 및 바이트를 단어사전에 저장
         1. 특수 토큰 4개를 고정 ID 0~3에 등록합니다.
         2. byte 0~255를 ID 4~259에 bytes([byte_value]) 형태로 등록합니다.
         """
-        raise NotImplementedError("_init_special_tokens를 구현하세요.")
+        for token, idx in SPECIAL_IDS.items():
+            self.id_to_token[idx] = token
+            self.token_to_id[token] = idx
+
+        for byte_value in range(NUM_BYTES):
+            token_id = BYTE_OFFSET + byte_value
+            byte_token = bytes([byte_value])
+
+            self.id_to_token[token_id] = byte_token
+            self.token_to_id[byte_token] = token_id
 
     def get_pad_id(self):
         """padding 토큰 ID."""
@@ -61,9 +71,38 @@ class BPETokenizer:
         """문장 끝 토큰 ID."""
         return SPECIAL_IDS[EOS_TOKEN]
 
+    def _merge_rule_helper(self, ids: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
+        new_ids = []
+        i = 0
+
+        while i < len(ids):
+            if i < len(ids) - 1 and (ids[i], ids[i + 1]) == pair:
+                new_ids.append(new_id)
+                i += 2
+            else:
+                new_ids.append(ids[i])
+                i += 1
+
+        return new_ids
+
+    def expand_token(self, token_id: int) -> bytes:
+        token = self.id_to_token[token_id]
+
+        if isinstance(token, bytes):
+            return token
+
+        if isinstance(token, tuple):
+            left_id, right_id = token
+            return self.expand_token(left_id) + self.expand_token(right_id)
+
+        if isinstance(token, str):
+            return b""
+
+        raise ValueError(f"Unknown token type: {type(token)}")
+
     def train(self, corpus: str):
         """
-        TODO: 코퍼스에서 BPE merge rule과 vocabulary를 학습합니다.
+        DONE: 코퍼스에서 BPE merge rule과 vocabulary를 학습합니다.
 
         구현 힌트:
         - `corpus.encode("utf-8")`로 byte ID 시퀀스를 만듭니다.
@@ -71,7 +110,40 @@ class BPETokenizer:
         - 새 token ID를 만들고, 시퀀스의 해당 pair를 새 ID로 치환합니다.
         - `self.merges`, `self.id_to_token`, `self.token_to_id`를 갱신합니다.
         """
-        raise NotImplementedError("BPETokenizer.train을 구현하세요.")
+        self.id_to_token = {}
+        self.token_to_id = {}
+        self._init_special_tokens()
+        self.merges = []
+
+        ids = []
+        for byte in corpus.encode("utf-8"):
+            token_id = BYTE_OFFSET + byte
+            ids.append(token_id)
+
+        while len(self.id_to_token) < self.vocab_size:
+            if len(ids) < 2:
+                break
+
+            pair_counts = {}
+            for i in range(len(ids) - 1):
+                pair = (ids[i], ids[i + 1])
+
+                if pair not in pair_counts:
+                    pair_counts[pair] = 0
+
+                pair_counts[pair] += 1
+
+            if not pair_counts:
+                break
+
+            best_pair = max(pair_counts, key=pair_counts.get)
+            new_id = len(self.id_to_token)
+
+            self.id_to_token[new_id] = best_pair
+            self.token_to_id[best_pair] = new_id
+            self.merges.append(best_pair)
+
+            ids = self._merge_rule_helper(ids, best_pair, new_id)
 
     def save(self, path: str | Path):
         """
@@ -79,13 +151,60 @@ class BPETokenizer:
 
         bytes와 tuple은 JSON에 바로 저장할 수 없으므로 type 정보를 함께 저장하세요.
         """
-        raise NotImplementedError("BPETokenizer.save를 구현하세요.")
+        merge_rules = [[a, b] for a, b in self.merges]
+        data = {
+            "vocab_size": self.vocab_size,
+            "merges": merge_rules,
+            "id_to_token": {},
+        }
+
+        for token_id, token in self.id_to_token.items():
+            if isinstance(token, bytes):
+                data["id_to_token"][str(token_id)] = {
+                    "type": "bytes",
+                    "value": list(token),
+                }
+            elif isinstance(token, str):
+                data["id_to_token"][str(token_id)] = {
+                    "type": "str",
+                    "value": token,
+                }
+            elif isinstance(token, tuple):
+                data["id_to_token"][str(token_id)] = {
+                    "type": "tuple",
+                    "value": list(token),
+                }
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
     def load(self, path: str | Path):
         """
         TODO: save()로 저장한 JSON 파일을 읽어 vocabulary와 merge rule을 복원합니다.
         """
-        raise NotImplementedError("BPETokenizer.load를 구현하세요.")
+        self.id_to_token = {}
+        self.token_to_id = {}
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.vocab_size = data["vocab_size"]
+        merge_rules = data["merges"]
+        self.merges = [(a, b) for a, b in merge_rules]
+
+        token_dict = data["id_to_token"]
+        for token_id, token_data in token_dict.items():
+            token_type = token_data["type"]
+            token = token_data["value"]
+
+            if token_type == "bytes":
+                self.id_to_token[int(token_id)] = bytes(token)
+            elif token_type == "str":
+                self.id_to_token[int(token_id)] = token
+            elif token_type == "tuple":
+                self.id_to_token[int(token_id)] = tuple(token)
+
+        self.token_to_id = {token: token_id for token_id, token in self.id_to_token.items()}
 
     def encode(self, text: str, add_bos_eos: bool = False) -> list[int]:
         """
@@ -96,7 +215,21 @@ class BPETokenizer:
         - train/load에서 얻은 merge rule을 학습 순서대로 적용합니다.
         - add_bos_eos=True이면 앞뒤에 bos/eos ID를 붙입니다.
         """
-        raise NotImplementedError("BPETokenizer.encode를 구현하세요.")
+        if not self.id_to_token:
+            self._init_special_tokens()
+
+        ids = []
+        for byte_value in text.encode("utf-8"):
+            token_id = BYTE_OFFSET + byte_value
+            ids.append(token_id)
+
+        for pair in self.merges:
+            new_token_id = self.token_to_id[pair]
+            ids = self._merge_rule_helper(ids, pair, new_token_id)
+        if add_bos_eos:
+            ids = [self.get_bos_id()] + ids + [self.get_eos_id()]
+
+        return ids
 
     def decode(self, ids: list[int], skip_special: bool = True) -> str:
         """
@@ -106,4 +239,17 @@ class BPETokenizer:
         - merge token은 원본 byte token까지 재귀적으로 펼칩니다.
         - byte를 하나씩 decode하지 말고, 마지막에 `bytes(...).decode("utf-8")`를 한 번만 호출합니다.
         """
-        raise NotImplementedError("BPETokenizer.decode를 구현하세요.")
+        byte_chunks = []
+
+        for token_id in ids:
+            token = self.id_to_token[token_id]
+
+            if isinstance(token, str):
+                if skip_special:
+                    continue
+                byte_chunks.append(token.encode("utf-8"))
+                continue
+
+            byte_chunks.append(self.expand_token(token_id))
+
+        return b"".join(byte_chunks).decode("utf-8")
