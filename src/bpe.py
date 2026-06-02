@@ -226,7 +226,6 @@ class BPETokenizer:
         for pair in self.merges:
             new_token_id = self.token_to_id[pair]
             ids = self._merge_rule_helper(ids, pair, new_token_id)
-
         if add_bos_eos:
             ids = [self.get_bos_id()] + ids + [self.get_eos_id()]
 

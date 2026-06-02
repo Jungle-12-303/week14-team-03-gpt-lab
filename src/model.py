@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """GPT 모델 구성 요소 과제 템플릿."""
 
+import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 try:
     from .attention import MultiHeadAttention
@@ -21,31 +23,19 @@ class LayerNorm(nn.Module):
         self.gamma = nn.Parameter(torch.ones(normalized_shape))
         self.beta = nn.Parameter(torch.zeros(normalized_shape))
         self.eps = eps
+        """
+        gamma = 각 feature의 크기를 조절하는 학습 파라미터
+        beta = 각 feature의 위치를 조절하는 학습 파라미터
+        """
 
     # [2,4,6]
     # [1,3,5]
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: 마지막 차원의 평균과 분산으로 정규화한 뒤 gamma/beta를 적용합니다."""
-        
-        # mean = [[4.0]
-        #        [3.0]]
-        mean = x.mean(dim = -1, keepdim = True)
-        
-        # [2.667]
-        # [2.667]
-        var = x.var(dim = -1, keepdim = True, unbiased = False)
-
-        # 정규화
-        # 각 값에서 평균 뺴고 표준편차로 나눈다
-        # [[-1.2247, 0.0000, 1.2247],
-        # [-1.2247, 0.0000, 1.2247]]
-        norm_x = (x - mean) / torch.sqrt(var + self.eps)
-
-        # gamma, beta 적용
-        # 학습하면서 gamma, beta를 바꾼다
-        output = self.gamma * norm_x + self.beta
-
-        # raise NotImplementedError("LayerNorm.forward를 구현하세요.")
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        x_norm = (x - mean) / torch.sqrt(var + self.eps)
+        return self.gamma * x_norm + self.beta
 
 # 큰 양수는 거의 그대로 통과
 # 큰 음수는 거의 0에 가깝게 줄인다
@@ -58,12 +48,11 @@ class GELU(nn.Module):
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: tanh 근사식 또는 torch 연산으로 GELU를 구현합니다."""
-        return 0.5 * x * (1 + torch.tanh(torch.sqrt(torch.tensor(2.0/torch.pi)) *
-                                        (x + 0.044715 * torch.pow(x,3))
-                        ))
-        # raise NotImplementedError("GELU.forward를 구현하세요.")
-
+        return 0.5 * x * (
+            1.0 + torch.tanh(
+                math.sqrt(2.0 / math.pi) * (x + 0.044715 * x.pow(3))
+            )
+        )
 
 class FeedForward(nn.Module):
     """Transformer FFN: Linear -> GELU -> Linear -> Dropout."""
@@ -71,19 +60,17 @@ class FeedForward(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
         super().__init__()
         # TODO: d_model -> mult*d_model -> d_model 구조의 작은 MLP를 정의하세요.
-        self.layers = nn.Sequential(
-            nn.Linear(d_model, mult * d_model), #토큰 벡터를 4차원에서 16차원을 키운다
-            GELU(), #활성화 함수, 큰 양수는 거의 그대로 통과/큰 음수는 거의 0에 가깝게 줄임/0 근처 값은 부드럽게 조절
-            nn.Linear(mult * d_model, d_model), # 16차원의 토큰 벡터를 4차원으로 줄인다
-            nn.Dropout(dropout) #학습 중에 일부 값을 랜덤하게 0으로 만든다
-        )
-
         # raise NotImplementedError("FeedForward.__init__을 구현하세요.")
+        self.layers = nn.Sequential(
+            nn.Linear(d_model, mult * d_model),
+            GELU(),
+            nn.Linear(mult * d_model, d_model),
+            nn.Dropout(dropout),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: FeedForward 네트워크를 통과시킵니다."""
-        return self.layers(x) #실제 계산은 여기서 일어난다
-        # raise NotImplementedError("FeedForward.forward를 구현하세요.")
+        return self.layers(x)
 
 
 class TransformerBlock(nn.Module):
@@ -100,46 +87,32 @@ class TransformerBlock(nn.Module):
         qkv_bias: bool = False,
     ):
         super().__init__()
-        # TODO: attention, ffn, layernorm, dropout을 정의하세요.
+
         self.att = MultiHeadAttention(
-            d_model = d_model,
-            n_heads = n_heads,
-            dropout = drop_rate,
-            qkv_bias = qkv_bias,
+            d_model=d_model,
+            n_heads=n_heads,
+            drop_rate=drop_rate,
+            qkv_bias=qkv_bias,
         )
-
-        # 각 토큰 벡터를 
-        self.ffn = FeedForward(
-            d_model = d_model,
-            dropout = drop_rate,
-        )
-        
-        #각 토큰 벡터 값 분포 안정화
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-
+        self.ff = FeedForward(d_model, dropout=drop_rate)
+        self.norm1 = LayerNorm(d_model)
+        self.norm2 = LayerNorm(d_model)
         self.drop_shortcut = nn.Dropout(drop_rate)
-        # raise NotImplementedError("TransformerBlock.__init__을 구현하세요.")
 
     def forward(self, x: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
-        """TODO: attention과 ffn을 residual connection으로 연결합니다."""
-        # 1. Attention block + residaul connection
         shortcut = x
-        x = self.norm1(x) #attention에 넣기전 LayerNorm
-        x = self.att(x, causal_mask = causal_mask) #attention 적용
-        x = self.drop_shortcut(x) #
-        x = x + shortcut #숏컷 연결
+        x = self.norm1(x)
+        x = self.att(x, causal_mask=causal_mask)
+        x = self.drop_shortcut(x)
+        x = x + shortcut
 
-        # 2. FeedForward block + residual connection
         shortcut = x
         x = self.norm2(x)
-        x = self.ffn(x)
+        x = self.ff(x)
         x = self.drop_shortcut(x)
         x = x + shortcut
 
         return x
-        # raise NotImplementedError("TransformerBlock.forward를 구현하세요.")
-
 
 class GPTModel(nn.Module):
     """InputEmbedding -> TransformerBlock N개 -> LayerNorm -> LM head."""
@@ -148,22 +121,62 @@ class GPTModel(nn.Module):
         super().__init__()
         self.config = config
         # TODO: embedding, blocks, final layernorm, lm_head를 정의하세요.
-        raise NotImplementedError("GPTModel.__init__을 구현하세요.")
+        # raise NotImplementedError("GPTModel.__init__을 구현하세요.")
 
-    def forward(
-        self,
-        idx: torch.Tensor,
-        targets: torch.Tensor | None = None,
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        self.embedding = InputEmbedding(
+            vocab_size=config["vocab_size"],
+            emb_dim=config["emb_dim"],
+            context_length=config["context_length"],
+            drop_rate=config["drop_rate"],
+        )
+
+        self.blocks = nn.Sequential(
+            *[
+                TransformerBlock(
+                    d_model=config["emb_dim"],
+                    n_heads=config["n_heads"],
+                    drop_rate=config["drop_rate"],
+                    qkv_bias=config["qkv_bias"],
+                )
+                for _ in range(config["n_layers"])
+            ]
+        )
+
+        self.final_norm = LayerNorm(config["emb_dim"])
+
+        self.lm_head = nn.Linear(
+            config["emb_dim"],
+            config["vocab_size"],
+            bias=False,
+        )
         """
+        logits는 입력 문맥을 보고, 각 위치마다 vocab_size개의 token 후보에 대해 만든 점수표
+
         TODO: logits를 만들고, targets가 있으면 cross entropy loss도 함께 반환합니다.
 
         Returns:
             targets가 None이면 logits
             targets가 있으면 (loss, logits)
         """
-        raise NotImplementedError("GPTModel.forward를 구현하세요.")
+    def forward(
+        self,
+        idx: torch.Tensor,
+        targets: torch.Tensor | None = None,
+        ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        x = self.embedding(idx)
+        x = self.blocks(x)
+        x = self.final_norm(x)
+        logits = self.lm_head(x)
 
+        if targets is None:
+            return logits
+
+        loss = F.cross_entropy(
+            logits.reshape(-1, logits.size(-1)),
+            targets.reshape(-1),
+        )
+
+        return loss, logits
 
 def generate_text_simple(
     model: GPTModel,
@@ -172,4 +185,12 @@ def generate_text_simple(
     context_size: int,
 ) -> torch.Tensor:
     """TODO: greedy 방식으로 max_new_tokens만큼 다음 토큰을 이어 붙입니다."""
-    raise NotImplementedError("generate_text_simple을 구현하세요.")
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            idx_cond = idx[:, -context_size:]
+            logits = model(idx_cond)
+            logits = logits[:, -1, :]
+            next_id = torch.argmax(logits, dim=-1, keepdim=True)
+            idx = torch.cat((idx, next_id), dim=1)
+
+    return idx
