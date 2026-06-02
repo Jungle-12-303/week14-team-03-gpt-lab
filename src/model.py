@@ -13,7 +13,8 @@ except ImportError:
     from attention import MultiHeadAttention
     from embeddings import InputEmbedding
 
-
+# 토큰 벡터를 정규화
+# 트랜스포머 block 과정에서 토큰 벡터 값이 너무 커지거나 작아질 수 있다
 class LayerNorm(nn.Module):
     """마지막 차원 기준 Layer Normalization."""
 
@@ -27,19 +28,24 @@ class LayerNorm(nn.Module):
         beta = 각 feature의 위치를 조절하는 학습 파라미터
         """
 
+    # [2,4,6]
+    # [1,3,5]
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: 마지막 차원의 평균과 분산으로 정규화한 뒤 gamma/beta를 적용합니다."""
-
-        mean = x.mean(dim=-1, keepdim = True)
-        # x는 현재 토큰의 벡터값 ex) [-2, 0, 2]
-        # mean은 그 벡터 값들의 평균값 = 0
-        # 표준편차 = 바로 값들의 일반적인 퍼짐 크기
-        var = x.var(dim=-1, keepdim=True, unbiased=False) # 분산
-        x_norm = (x - mean) / torch.sqrt(var + self.eps) # 정규화된 값 = 평균에서 얼마나 떨어져 있는지 / 표준편차
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        x_norm = (x - mean) / torch.sqrt(var + self.eps)
         return self.gamma * x_norm + self.beta
 
+# 큰 양수는 거의 그대로 통과
+# 큰 음수는 거의 0에 가깝게 줄인다
+# 0 근처는 부드럽게 조절
+# 부드럽다는 거 -> 학습할 때 값이 급격하게 죽거나 튀는 현상이 줄어든다
 class GELU(nn.Module):
     """GPT FeedForward에서 사용하는 GELU 활성화 함수."""
+
+    def __init__(self):
+        super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return 0.5 * x * (
@@ -56,16 +62,15 @@ class FeedForward(nn.Module):
         # TODO: d_model -> mult*d_model -> d_model 구조의 작은 MLP를 정의하세요.
         # raise NotImplementedError("FeedForward.__init__을 구현하세요.")
         self.layers = nn.Sequential(
-            nn.Linear(d_model , mult * d_model),
+            nn.Linear(d_model, mult * d_model),
             GELU(),
-            nn.Linear(mult * d_model ,d_model),
+            nn.Linear(mult * d_model, d_model),
             nn.Dropout(dropout),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: FeedForward 네트워크를 통과시킵니다."""
         return self.layers(x)
-
 
 
 class TransformerBlock(nn.Module):
