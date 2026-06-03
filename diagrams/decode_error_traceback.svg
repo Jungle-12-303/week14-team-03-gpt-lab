@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="760" viewBox="0 0 1180 760">
+  <rect width="1180" height="760" fill="#f6f7f9"/>
+  <rect x="22" y="22" width="1136" height="716" rx="8" fill="#ffffff" stroke="#d8dee9"/>
+  <text x="42" y="56" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="700" fill="#222">Pretraining log and decode traceback</text>
+
+  <text x="42" y="96" font-family="Menlo, Consolas, monospace" font-size="15" fill="#333">Epoch 1, step 200: train loss 7.3076, val loss 7.2948</text>
+  <text x="42" y="122" font-family="Menlo, Consolas, monospace" font-size="15" fill="#333">Epoch 1, step 400: train loss 7.2838, val loss 7.2845</text>
+  <text x="42" y="148" font-family="Menlo, Consolas, monospace" font-size="15" fill="#333">Epoch 1, step 600: train loss 7.1929, val loss 7.1857</text>
+  <text x="42" y="174" font-family="Menlo, Consolas, monospace" font-size="15" fill="#333">Epoch 2, step 800: train loss 6.8538, val loss 6.8845</text>
+
+  <rect x="42" y="204" width="1096" height="66" rx="6" fill="#fff5f5" stroke="#ef9a9a"/>
+  <text x="62" y="232" font-family="Menlo, Consolas, monospace" font-size="15" fill="#b71c1c">UnicodeDecodeError</text>
+  <text x="62" y="256" font-family="Menlo, Consolas, monospace" font-size="15" fill="#b71c1c">'utf-8' codec can't decode byte 0x98 in position 42: invalid start byte</text>
+
+  <text x="42" y="308" font-family="Menlo, Consolas, monospace" font-size="15" fill="#333">Traceback path</text>
+  <text x="62" y="340" font-family="Menlo, Consolas, monospace" font-size="14" fill="#333">src/train.py:344</text>
+  <text x="238" y="340" font-family="Menlo, Consolas, monospace" font-size="14" fill="#555">generated_text = generate_and_print_sample(...)</text>
+
+  <text x="62" y="374" font-family="Menlo, Consolas, monospace" font-size="14" fill="#333">src/train.py:258</text>
+  <text x="238" y="374" font-family="Menlo, Consolas, monospace" font-size="14" fill="#555">generated_text = tokenizer.decode(generated_ids[0].tolist())</text>
+
+  <text x="62" y="408" font-family="Menlo, Consolas, monospace" font-size="14" fill="#333">src/bpe.py:263</text>
+  <text x="238" y="408" font-family="Menlo, Consolas, monospace" font-size="14" fill="#555">return b&quot;&quot;.join(byte_chunks).decode(&quot;utf-8&quot;)</text>
+
+  <rect x="42" y="454" width="1096" height="172" rx="6" fill="#f3f7ff" stroke="#9db7e8"/>
+  <text x="62" y="486" font-family="Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#183153">Root cause</text>
+  <text x="62" y="520" font-family="Menlo, Consolas, monospace" font-size="14" fill="#183153">Training and loss calculation were already running normally.</text>
+  <text x="62" y="548" font-family="Menlo, Consolas, monospace" font-size="14" fill="#183153">The crash happened only when generated token IDs were expanded into bytes</text>
+  <text x="62" y="576" font-family="Menlo, Consolas, monospace" font-size="14" fill="#183153">and decoded as strict UTF-8 during sample printing.</text>
+  <text x="62" y="604" font-family="Menlo, Consolas, monospace" font-size="14" fill="#183153">Early GPT outputs can contain invalid byte sequences, so decode should use errors=&quot;replace&quot;.</text>
+
+  <text x="42" y="678" font-family="Menlo, Consolas, monospace" font-size="14" fill="#555">Fix direction: tokenizer.decode(..., errors=&quot;replace&quot;) or catch UnicodeDecodeError before saving generated_sample.</text>
+</svg>

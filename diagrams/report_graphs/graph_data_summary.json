@@ -1,0 +1,209 @@
+{
+  "light": [
+    {
+      "name": "Model-Small",
+      "group": "Model size",
+      "emb_dim": 128,
+      "n_layers": 2,
+      "drop_rate": 0.1,
+      "lr": "3e-4",
+      "epochs": 3,
+      "lm_train_loss": 5.834114456176758,
+      "lm_val_loss": 5.959245872497559,
+      "sent_val_loss": 0.6467223553657532,
+      "sent_val_acc": 0.634,
+      "sent_test_acc": 0.607
+    },
+    {
+      "name": "Model-Base",
+      "group": "Model size",
+      "emb_dim": 192,
+      "n_layers": 4,
+      "drop_rate": 0.1,
+      "lr": "3e-4",
+      "epochs": 3,
+      "lm_train_loss": 5.256286859512329,
+      "lm_val_loss": 5.452703619003296,
+      "sent_val_loss": 0.625077056646347,
+      "sent_val_acc": 0.642,
+      "sent_test_acc": 0.645
+    },
+    {
+      "name": "Model-Large",
+      "group": "Model size",
+      "emb_dim": 256,
+      "n_layers": 4,
+      "drop_rate": 0.1,
+      "lr": "3e-4",
+      "epochs": 1,
+      "lm_train_loss": 6.2820830821990965,
+      "lm_val_loss": 6.366817235946655,
+      "sent_val_loss": 0.6683388192653656,
+      "sent_val_acc": 0.588,
+      "sent_test_acc": 0.571
+    },
+    {
+      "name": "LR-Low",
+      "group": "Learning rate",
+      "emb_dim": 192,
+      "n_layers": 4,
+      "drop_rate": 0.1,
+      "lr": "1e-4",
+      "epochs": 3,
+      "lm_train_loss": 6.435982751846313,
+      "lm_val_loss": 6.545151853561402,
+      "sent_val_loss": 0.664238709449768,
+      "sent_val_acc": 0.609,
+      "sent_test_acc": 0.583
+    },
+    {
+      "name": "LR-Base",
+      "group": "Learning rate",
+      "emb_dim": 192,
+      "n_layers": 4,
+      "drop_rate": 0.1,
+      "lr": "3e-4",
+      "epochs": 3,
+      "lm_train_loss": 5.20385217666626,
+      "lm_val_loss": 5.45347490310669,
+      "sent_val_loss": 0.6509086501598358,
+      "sent_val_acc": 0.621,
+      "sent_test_acc": 0.62
+    },
+    {
+      "name": "LR-High",
+      "group": "Learning rate",
+      "emb_dim": 192,
+      "n_layers": 4,
+      "drop_rate": 0.1,
+      "lr": "5e-4",
+      "epochs": 1,
+      "lm_train_loss": 6.1086671352386475,
+      "lm_val_loss": 6.229723072052002,
+      "sent_val_loss": 0.6657533373832702,
+      "sent_val_acc": 0.594,
+      "sent_test_acc": 0.62
+    },
+    {
+      "name": "Dropout-0.0",
+      "group": "Dropout",
+      "emb_dim": 128,
+      "n_layers": 4,
+      "drop_rate": 0.0,
+      "lr": "3e-4",
+      "epochs": 3,
+      "lm_train_loss": 5.3691833972930905,
+      "lm_val_loss": 5.6572784900665285,
+      "sent_val_loss": 0.6444434204101562,
+      "sent_val_acc": 0.616,
+      "sent_test_acc": 0.618
+    },
+    {
+      "name": "Dropout-0.2",
+      "group": "Dropout",
+      "emb_dim": 128,
+      "n_layers": 4,
+      "drop_rate": 0.2,
+      "lr": "3e-4",
+      "epochs": 3,
+      "lm_train_loss": 5.974258470535278,
+      "lm_val_loss": 6.076857852935791,
+      "sent_val_loss": 0.6773866634368897,
+      "sent_val_acc": 0.533,
+      "sent_test_acc": 0.553
+    }
+  ],
+  "basic": {
+    "emb192": {
+      "pretrain": {
+        "config": {
+          "vocab_size": 3000,
+          "context_length": 128,
+          "emb_dim": 192,
+          "n_heads": 4,
+          "n_layers": 4,
+          "drop_rate": 0.1,
+          "qkv_bias": false
+        },
+        "num_epochs": 10,
+        "steps": 7830,
+        "eval_train_loss": 4.883791422843933,
+        "eval_val_loss": 5.453805446624756,
+        "epoch_train_loss": 5.175249232490705,
+        "gap": 0.5700140237808231
+      },
+      "sentiment": {
+        "train": {
+          "split": "train",
+          "epoch": 1,
+          "loss": 0.5002800404358142,
+          "accuracy": 0.751744728494122,
+          "num_examples": 107180
+        },
+        "val": {
+          "split": "val",
+          "epoch": 1,
+          "loss": 0.42595675082367396,
+          "accuracy": 0.8080266122974568,
+          "num_examples": 9319
+        },
+        "test": {
+          "split": "test",
+          "epoch": 1,
+          "loss": 0.43372761825538864,
+          "accuracy": 0.8047282836970219,
+          "num_examples": 49997
+        }
+      }
+    },
+    "emb256": {
+      "pretrain": {
+        "config": {
+          "vocab_size": 3000,
+          "context_length": 128,
+          "emb_dim": 256,
+          "n_heads": 4,
+          "n_layers": 4,
+          "drop_rate": 0.1,
+          "qkv_bias": false
+        },
+        "num_epochs": 10,
+        "steps": 7830,
+        "eval_train_loss": 4.48909170627594,
+        "eval_val_loss": 5.447307229042053,
+        "epoch_train_loss": 4.913782884030202,
+        "gap": 0.9582155227661131
+      },
+      "sentiment": {
+        "train": {
+          "split": "train",
+          "epoch": 1,
+          "loss": 0.5037152097908213,
+          "accuracy": 0.7507184176152267,
+          "num_examples": 107180
+        },
+        "val": {
+          "split": "val",
+          "epoch": 1,
+          "loss": 0.45407669390267424,
+          "accuracy": 0.7821654683978968,
+          "num_examples": 9319
+        },
+        "test": {
+          "split": "test",
+          "epoch": 1,
+          "loss": 0.46068660028493863,
+          "accuracy": 0.7805268316098966,
+          "num_examples": 49997
+        }
+      }
+    }
+  },
+  "corpus_chars": {
+    "actual_train_chars": 1379486,
+    "actual_val_chars": 120560,
+    "light_requested": 500000,
+    "basic_requested": 1500000,
+    "oversized_requested": 5000000
+  }
+}
