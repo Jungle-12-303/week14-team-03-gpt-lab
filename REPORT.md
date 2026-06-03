@@ -1,69 +1,74 @@
 # mini GPT 구현 과제 보고서
 
-## 0. 반·팀원
+## 제출 정보
 
 | 항목 | 내용 |
 | --- | --- |
-| 반 | (미입력) |
-| 팀명 | (미입력) |
-| 팀원 | (미입력) |
+| 3팀 | (김동현) |
+| 3팀 | (정찬빈) |
+| 3팀 | (주호석) |
 
 ---
-## 2. 구현 현황
 
-| 단계 | 구현 내용 | 구현 파일 | 담당자 |
-| --- | --- | --- | --- |
-| 1 | UTF-8 byte-level BPE tokenizer | `src/bpe.py` | (미입력) |
+## 0. 보고서 요약
+
+이 프로젝트의 목표는 PyTorch만 사용해서 mini GPT를 직접 구현하고, NSMC 영화 리뷰 데이터로 사전 학습과 감성 분류 미세 조정을 수행하는 것이다.
+
+
+> Light 설정에서 `model_size`, `learning rate`, `dropout`을 바꿔 보았을 때, 어떤 조합이 감성 분류 성능까지 가장 안정적으로 이어지는가?
+
+실험은 먼저 빠른 비교가 가능한 Light 설정에서 진행했다.
+
+| 단계 | 설정 | 목적 |
+| --- | --- | --- |
+| Smoke | `corpus[:5000]`, `vocab_size=300`, `context_length=32` | BPE와 한 배치 학습 확인 |
+| Light | `corpus[:500000]`, `vocab_size=2000`, `context_length=64` | 여러 하이퍼파라미터 후보를 빠르게 비교 |
+| Basic | `corpus[:1500000]`, `vocab_size=3000`, `context_length=128` | Light에서 고른 조합을 더 큰 설정에 적용 |
+
+Basic 확장에 사용할 기준 조합은 다음 순서로 정했다.
+
+1. `sentiment validation accuracy`가 높은 조합
+2. validation accuracy가 비슷하면 `sentiment validation loss`가 낮은 조합
+3. 둘 다 비슷하면 더 작은 모델
+
+이 기준으로 Basic 확장에 사용한 당시 기준 조합은 `Model-Base`였다. 다만 첨부 JSON을 기준으로 3 epoch 결과를 다시 정리한 6.2~7.1에서는 `Model-Large`와 `Dropout-0.0`이 더 높은 accuracy를 보이므로, 최신 수치 해석은 해당 절을 따른다.
+
+| 선택 항목 | 최종 값 |
+| --- | --- |
+| `emb_dim` | 192 |
+| `n_layers` | 4 |
+| `n_heads` | 4 |
+| `drop_rate` | 0.1 |
+| `lr` | 3e-4 |
+
+왜 이 기준 조합을 사용했는지의 핵심은 단순히 loss 하나만 낮았기 때문이 아니다. 사전 학습 loss가 낮아지는 것과 실제 downstream task인 감성 분류 validation accuracy가 함께 안정적으로 나오는 조합을 우선했다.
+
+---
+
+## 1. 구현 현황
+
+| 단계 | 구현 내용 | 구현 파일 | 
+| --- | --- | --- |
+| 1 | UTF-8 byte-level BPE tokenizer | `src/bpe.py` 
 | 2 | GPTDataset, create_dataloader, InputEmbedding | `src/dataset.py`, `src/embeddings.py` | (미입력) |
 | 3 | MultiHeadAttention, causal mask | `src/attention.py` | (미입력) |
 | 4 | LayerNorm, GELU, FeedForward, TransformerBlock, GPTModel, generate_text_simple | `src/model.py` | (미입력) |
 | 5 | loss 계산, checkpoint, generate, train_model | `src/train.py` | (미입력) |
 | 6 | NSMC 감성 분류 Dataset과 classifier | `src/finetune.py` | (미입력) |
 
-전체 모델 흐름은 다음과 같다.
-
-```text
-NSMC text
--> UTF-8 byte-level BPE tokenizer
--> GPTDataset(input, target)
--> InputEmbedding(token embedding + position embedding)
--> TransformerBlock x N
--> LayerNorm
--> LM head
--> 다음 토큰 예측
-```
-
-감성 분류에서는 사전 학습된 GPT backbone을 그대로 사용하되, 다음 토큰을 맞히는 `lm_head` 대신 문장 전체를 2개 클래스의 점수로 바꾸는 classification head를 붙였다.
-
-```text
-review text
--> tokenizer
--> GPT backbone
--> 마지막 유효 token hidden state
--> Linear classifier
--> 부정/긍정 logits
-```
-
-이 구조를 선택한 이유는 사전 학습과 미세 조정의 목적이 다르기 때문이다. 사전 학습은 각 위치에서 다음 토큰을 맞히는 문제이고, 감성 분류는 리뷰 전체가 긍정인지 부정인지 맞히는 문제다. 따라서 backbone은 공유할 수 있지만 출력 head는 task에 맞게 바꾸는 것이 자연스럽다.
-
 ---
 
-## 3. 테스트 통과 현황
+## 2. 테스트 통과 현황
 
 로컬 프로젝트의 `.venv` 환경에서 전체 테스트를 실행했다.
 
 | 실행 명령 | 결과 | 비고 |
 | --- | --- | --- |
 | `./.venv/bin/python -m pytest tests/ -q` | `34 passed, 1 warning` | `plot_losses`의 non-interactive canvas warning 1개 |
-전처리 방식	빈 리뷰 제거, 공백 정리, train/validation 분리
-사용한 데이터 크기	Smoke / Light / Basic 중 선택 
-| 미세 조정 데이터 | `data/nsmc_sentiment_train.jsonl`, `data/nsmc_sentiment_val.jsonl`, `data/nsmc_sentiment_test.jsonl` |
-| 전처리 방식 | 빈 리뷰 제거, 공백 정리, train/validation 분리 |
-| 사용한 데이터 크기 | Light, Basic |
 
 ---
 
-## 4. 데이터
+## 3. 데이터
 
 | 항목 | 내용 |
 | --- | --- |
@@ -72,23 +77,68 @@ review text
 | 사전 학습 데이터 | `data/nsmc_lm_train.txt`, `data/nsmc_lm_val.txt` |
 | 미세 조정 데이터 | `data/nsmc_sentiment_train.jsonl`, `data/nsmc_sentiment_val.jsonl`, `data/nsmc_sentiment_test.jsonl` |
 | 전처리 방식 | 빈 리뷰 제거, 공백 정리, train/validation 분리 |
-| 사용한 데이터 크기 |  Light / Basic |
+| 사전 학습 train 크기 | 1,379,486자 |
+| 사전 학습 validation 크기 | 120,560자 |
+| 감성 분류 train 개수 | 137,996개 |
+| 감성 분류 validation 개수 | 11,999개 |
+| 감성 분류 test 개수 | 49,997개 |
 
-----
+실험 규모는 `EXPERIMENT_PRESET`으로 나누었다. Light는 빠른 비교를 위해 일부 데이터만 사용했고, Basic은 가능한 전체 데이터를 사용했다.
 
-### 5. BPE 설정
+| 설정 | 사전 학습 corpus | 감성 분류 train | 감성 분류 validation | 감성 분류 test | 목적 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Light | 앞 500,000자 | 앞 5,000개 | 앞 1,000개 | 앞 1,000개 | 여러 하이퍼파라미터 후보를 빠르게 비교 |
+| Basic | 전체 train corpus | 전체 137,996개 | 전체 11,999개 | 전체 49,997개 | Light에서 고른 설정을 더 큰 데이터로 검증 |
 
-| 항목 | Light | Basic |
-| --- | ---: | ---: |
-| corpus chars | 500,000 | 1,500,000 |
-| vocab_size | 2,000 | 3,000 |
-| context_length | 64 | 128 |
-| vocabulary 저장 경로 | `data/vocab_light_2000.json` | `data/vocab_basic_3000.json` |
-| 어휘 학습 시간 | 미기록(JSON 미포함) | 미기록(JSON 미포함) |
-| 인코딩/디코딩 복원 예시 | (예: `decode(encode("이 영화는 좋았다")) == 원문`) 생각해보고|
-
+---
 
 ## 4. BPE
+
+### 4.1 Light/Basic 설정
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>Light</th>
+      <th>Basic</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>corpus chars</td>
+      <td align="right">500,000</td>
+      <td align="right">1,500,000</td>
+    </tr>
+    <tr>
+      <td>vocab_size</td>
+      <td align="right">2,000</td>
+      <td align="right">3,000</td>
+    </tr>
+    <tr>
+      <td>context_length</td>
+      <td align="right">64</td>
+      <td align="right">128</td>
+    </tr>
+    <tr>
+      <td>vocabulary 저장 경로</td>
+      <td><code>data/vocab_light_2000.json</code></td>
+      <td><code>data/vocab_basic_3000.json</code></td>
+    </tr>
+    <tr>
+      <td>어휘 학습 시간</td>
+      <td>미기록(JSON 미포함)</td>
+      <td>미기록(JSON 미포함)</td>
+    </tr>
+    <tr>
+      <td>인코딩/디코딩 복원</td>
+      <td colspan="2"><code>decode(encode("이 영화는 좋았다! English 123", add_bos_eos=True), skip_special=True) == "이 영화는 좋았다! English 123"</code></td>
+    </tr>
+  </tbody>
+</table>
+
+
+### 4.2 구현 방식
 
 | 항목 | 내용 |
 | --- | --- |
@@ -120,40 +170,22 @@ BPE는 UTF-8 byte-level 방식으로 구현했다. 한국어는 한 글자가 UT
 
 ## 5. 모델 구조
 
+![모델 구조](diagrams/000_gpt_pretrain_vs_finetune_flow.svg)
+
 ### 5.1 공통 구조
-
-```text
-token IDs
--> InputEmbedding
-   - token embedding
-   - position embedding
-   - dropout
--> TransformerBlock x n_layers
-   - LayerNorm
-   - Causal Multi-Head Self-Attention
-   - shortcut connection
-   - LayerNorm
-   - FeedForward
-   - shortcut connection
--> final LayerNorm
--> LM head
--> vocab logits
-```
-
-## 5. 모델 구조
 
 | 항목 | 내용 |
 | --- | --- |
 | 구현 파일 | `src/model.py` |
 | 전체 구조 | InputEmbedding -> N x TransformerBlock -> LayerNorm -> LM head |
-| vocab_size | (3000) |
-| context_length | (128) |
-| emb_dim | (192) |
-| n_heads | (4) |
-| n_layers | (4) |
-| drop_rate | (예: 0.1) |
-| qkv_bias | True / False |
-| 총 파라미터 수 | (?) |
+| vocab_size | 3,000 |
+| context_length | 128 |
+| emb_dim | 192 |
+| n_heads | 4 |
+| n_layers | 4 |
+| drop_rate | 0.1 |
+| qkv_bias | False |
+| 총 파라미터 수 | 2,954,112개 |
 
 ---
 
@@ -163,6 +195,8 @@ token IDs
 ---
 
 ## 6. 실험 설계와 가설
+
+##### Light 모델을 통해 최적의 하이퍼 파라미터를 구하기 위한 테스트 과정을 진행 
 
 ### 6.1 공통 Light 설정
 
@@ -178,7 +212,7 @@ token IDs
 | eval_iter | 20 |
 | start_context | `이 영화` |
 
-#### 확정 파라미터 값 (Basic)
+#### 6.1.1 확정 파라미터 값 (Basic)
 
 | 구분 | 항목 | 값 |
 | --- | --- | --- |
@@ -194,7 +228,7 @@ token IDs
 
 실험은 한 번에 모든 값을 바꾸지 않고, 가능한 한 하나의 축만 바꾸는 방식으로 설계했다. 이렇게 해야 어떤 변화가 결과에 영향을 주었는지 설명할 수 있기 때문이다.
 
-단, 실제 저장된 JSON 기준으로 dropout 실험은 `emb_dim=128`, `n_layers=4`로 되어 있어 Base 설정과 완전히 같은 통제 실험은 아니었다. 이 한계는 고찰에 따로 정리했다.
+아래 6.2~6.4의 검증 그래프는 첨부 JSON 파일을 기준으로 다시 계산했다. 막대그래프는 최종 sentiment validation/test accuracy를 비교하고, 선그래프는 3 epoch 동안의 LM train/validation loss 변화를 비교한다. 각 가설 해석에서는 `diagrams/report_graphs/15_split_graph_data_summary_3epoch.json`의 값을 우선한다.
 
 ### 6.2 Model size 가설
 
@@ -204,13 +238,33 @@ token IDs
 
 결과:
 
-> 너무 크면 Light 데이터와 짧은 epoch 안에서 충분히 학습되지 않을 수 있다. 따라서 중간 크기의 Base 모델이 가장 안정적일 것이다.
+> 3 epoch 기준으로 맞추면 `Model-Large`가 sentiment validation/test accuracy 모두 가장 높았다. 따라서 "큰 모델은 Light 데이터와 짧은 epoch 안에서 충분히 학습되지 않을 수 있다"는 1 epoch 결과의 해석은 맞지만, 3 epoch로 학습 시간을 맞추면 모델 크기를 키우는 것이 성능 향상에 도움이 되었다.
 
 왜 이런 가설을 세웠는가:
 
 - `emb_dim`은 각 토큰을 표현하는 벡터의 크기다. 값이 작으면 표현 공간이 좁아 복잡한 문맥을 담기 어렵다.
 - `n_layers`는 문맥을 반복적으로 조합하는 TransformerBlock의 개수다. layer가 적으면 깊은 패턴을 학습하기 어렵다.
 - 하지만 모델이 커지면 파라미터 수가 늘어나고, 같은 데이터와 같은 학습 시간에서는 충분히 수렴하지 못할 수 있다.
+
+검증 그래프:
+
+![Model size accuracy 막대그래프](diagrams/report_graphs/15_model_size_accuracy_bar_3epoch.png)
+
+![Model size LM loss 선그래프](diagrams/report_graphs/16_model_size_lm_loss_line_3epoch.png)
+
+첨부 JSON 기준 결과는 다음과 같다.
+
+| 모델 | 설정 | epoch | LM val loss | sentiment val acc | sentiment test acc |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Model-Small | `emb_dim=128`, `n_layers=2` | 3 | 5.959 | 0.634 | 0.607 |
+| Model-Base | `emb_dim=192`, `n_layers=4` | 3 | 5.453 | 0.642 | 0.645 |
+| Model-Large | `emb_dim=256`, `n_layers=4` | 3 | **5.336** | **0.682** | **0.686** |
+
+해석:
+
+- 3 epoch 기준에서는 **모델 크기를 키울수록 sentiment accuracy가 상승했다.** 따라서 "모델이 너무 작으면 표현력이 부족할 수 있다"는 가설은 지지된다.
+- 선그래프에서도 `Model-Large`의 LM validation loss가 가장 낮아졌다. 즉 더 큰 모델이 다음 토큰 예측에서도 더 낮은 검증 손실을 보였다.
+- 다만 이 결론은 3 epoch 기준이다. 1 epoch만 학습한 Large 결과에서는 성능이 낮았으므로, 큰 모델은 학습 시간을 충분히 확보해야 한다.
 
 ### 6.3 Learning rate 가설
 
@@ -224,6 +278,26 @@ token IDs
 - `lr=5e-4`는 빠르게 내려갈 수 있지만, 작은 mini GPT에서는 update가 커져 일반화가 흔들릴 수 있다.
 - `lr=3e-4`는 두 경우의 중간값으로, 수렴 속도와 안정성의 균형을 기대할 수 있다.
 
+검증 그래프:
+
+![Learning rate accuracy 막대그래프](diagrams/report_graphs/17_learning_rate_accuracy_bar_3epoch.png)
+
+![Learning rate LM loss 선그래프](diagrams/report_graphs/18_learning_rate_lm_loss_line_3epoch.png)
+
+첨부 JSON 기준 결과는 다음과 같다.
+
+| 설정 | lr | LM val loss | sentiment val acc | sentiment test acc |
+| --- | ---: | ---: | ---: | ---: |
+| LR-Low | `1e-4` | 6.549 | 0.604 | 0.591 |
+| LR-Base | `3e-4` | 5.486 | 0.621 | **0.644** |
+| LR-High | `5e-4` | **5.290** | **0.628** | 0.637 |
+
+해석:
+
+- `lr=1e-4`는 LM val loss와 sentiment accuracy가 모두 낮아, 제한된 epoch 안에서는 학습 속도가 부족하다는 가설을 지지한다.
+- `lr=5e-4`는 LM val loss와 validation accuracy가 가장 좋았지만, test accuracy는 `3e-4`보다 약간 낮았다.
+- 따라서 **`3e-4`가 가장 안정적일 것이라는 가설은 부분적으로만 맞다.** test accuracy 기준으로는 `3e-4`가 가장 높지만, validation 기준으로는 `5e-4`도 나쁘지 않았다. 한 번의 실험만으로 `3e-4`가 절대 최선이라고 단정하기는 어렵다.
+
 ### 6.4 Dropout 가설
 
 가설:
@@ -235,6 +309,26 @@ token IDs
 - dropout은 일부 hidden unit을 무작위로 끄면서 특정 feature에 과하게 의존하는 것을 줄인다.
 - 하지만 모델이 작거나 데이터가 제한적이면 dropout이 너무 클 때 필요한 정보까지 자주 사라져 underfitting이 날 수 있다.
 - 그래서 `0.0`, `0.1`, `0.2` 중에서는 `0.1`을 기본 후보로 두고 비교했다.
+
+검증 그래프:
+
+![Dropout accuracy 막대그래프](diagrams/report_graphs/19_dropout_accuracy_bar_3epoch.png)
+
+![Dropout LM loss 선그래프](diagrams/report_graphs/20_dropout_lm_loss_line_3epoch.png)
+
+첨부 JSON 기준 결과는 다음과 같다.
+
+| 설정 | drop_rate | sentiment val acc | sentiment test acc | train-val acc gap |
+| --- | ---: | ---: | ---: | ---: |
+| Dropout-0.0 | 0.0 | **0.688** | **0.702** | +12.4%p |
+| Dropout-0.1 | 0.1 | 0.621 | 0.644 | -4.7%p |
+| Dropout-0.2 | 0.2 | 0.523 | 0.544 | +3.8%p |
+
+해석:
+
+- **`drop_rate=0.1`이 가장 균형점일 것이라는 가설은 첨부 JSON 기준으로는 틀렸다.** 가장 높은 validation/test accuracy는 dropout을 끈 `0.0`에서 나왔다.
+- 다만 `Dropout-0.0`은 train accuracy가 validation accuracy보다 12.4%p 높아, 학습 데이터에 더 강하게 맞춰진 overfitting 가능성이 있다.
+- `Dropout-0.2`는 validation/test accuracy가 크게 낮아졌으므로, dropout이 너무 크면 학습 신호가 약해져 underfitting이 날 수 있다는 부분은 지지된다.
 
 ### 6.5 Basic 확장 가설
 
@@ -260,138 +354,23 @@ token IDs
 
 ### 7.1 전체 결과 표
 
+아래 표는 첨부 JSON의 마지막 평가 기록을 기준으로 다시 계산했다. `Model-Base`, `LR-Base`, `Dropout-0.1`은 같은 base 구조 계열이지만, 각 비교 축의 기준 실행이므로 반복해서 표기했다.
 
-<table>
-  <thead>
-    <tr>
-      <th>실험명</th>
-      <th>비교 축</th>
-      <th>emb_dim</th>
-      <th>n_layers</th>
-      <th>drop_rate</th>
-      <th>lr</th>
-      <th>epoch</th>
-      <th>LM train loss</th>
-      <th>LM val loss</th>
-      <th>sentiment val loss</th>
-      <th>sentiment val acc</th>
-      <th>sentiment test acc</th>
-      <th>생성 샘플 특징</th>
-      <th>학습 시간</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Model-Small</td>
-      <td>model_size</td>
-      <td align="right">128</td>
-      <td align="right">2</td>
-      <td align="right">0.1</td>
-      <td align="right">3e-4</td>
-      <td align="right">3</td>
-      <td align="right">5.8341</td>
-      <td align="right">5.9592</td>
-      <td align="right">0.6467</td>
-      <td align="right">0.634</td>
-      <td align="right">0.607</td>
-      <td>영화 리뷰 어휘는 나오지만 문장 연결이 불안정함</td>
-    </tr>
-    <tr style="background-color: #fff3bf;">
-      <td><strong>Model-Base (선택)</strong></td>
-      <td>model_size</td>
-      <td align="right"><strong>192</strong></td>
-      <td align="right"><strong>4</strong></td>
-      <td align="right"><strong>0.1</strong></td>
-      <td align="right"><strong>3e-4</strong></td>
-      <td align="right">3</td>
-      <td align="right">5.2563</td>
-      <td align="right">5.4527</td>
-      <td align="right"><strong>0.6251</strong></td>
-      <td align="right"><strong>0.642</strong></td>
-      <td align="right"><strong>0.645</strong></td>
-      <td>리뷰 문장 형태가 가장 안정적으로 나타남</td>
-    </tr>
-    <tr>
-      <td>Model-Large</td>
-      <td>model_size</td>
-      <td align="right">256</td>
-      <td align="right">4</td>
-      <td align="right">0.1</td>
-      <td align="right">3e-4</td>
-      <td align="right">1</td>
-      <td align="right">6.2821</td>
-      <td align="right">6.3668</td>
-      <td align="right">0.6683</td>
-      <td align="right">0.588</td>
-      <td align="right">0.571</td>
-      <td>큰 모델이지만 epoch가 짧아 충분히 수렴하지 못함</td>
-    </tr>
-    <tr>
-      <td>LR-Low</td>
-      <td>learning_rate</td>
-      <td align="right">192</td>
-      <td align="right">4</td>
-      <td align="right">0.1</td>
-      <td align="right">1e-4</td>
-      <td align="right">3</td>
-      <td align="right">6.4360</td>
-      <td align="right">6.5452</td>
-      <td align="right">0.6642</td>
-      <td align="right">0.609</td>
-      <td align="right">0.583</td>
-      <td>loss 감소가 느리고 생성 문장이 불안정함</td>
-    </tr>
-    <tr>
-      <td>LR-High</td>
-      <td>learning_rate</td>
-      <td align="right">192</td>
-      <td align="right">4</td>
-      <td align="right">0.1</td>
-      <td align="right">5e-4</td>
-      <td align="right">1</td>
-      <td align="right">6.1087</td>
-      <td align="right">6.2297</td>
-      <td align="right">0.6658</td>
-      <td align="right">0.594</td>
-      <td align="right">0.620</td>
-      <td>빠른 update를 기대했지만 val acc는 낮음</td>
-    </tr>
-    <tr>
-      <td>Dropout-0.0</td>
-      <td>dropout</td>
-      <td align="right">128</td>
-      <td align="right">4</td>
-      <td align="right">0.0</td>
-      <td align="right">3e-4</td>
-      <td align="right">3</td>
-      <td align="right">5.3692</td>
-      <td align="right">5.6573</td>
-      <td align="right">0.6444</td>
-      <td align="right">0.616</td>
-      <td align="right">0.618</td>
-      <td>train/val 간 차이가 생기며 일반화 이득은 제한적</td>
-    </tr>
-    <tr>
-      <td>Dropout-0.2</td>
-      <td>dropout</td>
-      <td align="right">128</td>
-      <td align="right">4</td>
-      <td align="right">0.2</td>
-      <td align="right">3e-4</td>
-      <td align="right">3</td>
-      <td align="right">5.9743</td>
-      <td align="right">6.0769</td>
-      <td align="right">0.6774</td>
-      <td align="right">0.533</td>
-      <td align="right">0.553</td>
-      <td>dropout이 커지며 학습 신호가 약해진 것으로 보임</td> 
-    </tr>
-  </tbody>
-</table>
+| 실험명 | 비교 축 | emb_dim | n_layers | drop_rate | lr | epoch | LM train loss | LM val loss | sentiment val loss | sentiment val acc | sentiment test acc | 요약 해석 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Model-Small | model_size | 128 | 2 | 0.1 | 3e-4 | 3 | 5.8341 | 5.9592 | 0.6467 | 0.634 | 0.607 | 작은 구조라 빠르지만 3 epoch 기준 acc는 가장 낮음 |
+| Model-Base | model_size | 192 | 4 | 0.1 | 3e-4 | 3 | 5.2563 | 5.4527 | **0.6251** | 0.642 | 0.645 | 기존 기본 구조, Small보다 높지만 Large보다 낮음 |
+| Model-Large | model_size | 256 | 4 | 0.1 | 3e-4 | 3 | 4.9458 | 5.3360 | 0.7333 | 0.682 | 0.686 | model_size 축에서 val/test acc 최고 |
+| LR-Low | learning_rate | 192 | 4 | 0.1 | 1e-4 | 3 | 6.4412 | 6.5491 | 0.6662 | 0.604 | 0.591 | update 폭이 작아 제한된 epoch에서 학습 부족 |
+| LR-Base | learning_rate | 192 | 4 | 0.1 | 3e-4 | 3 | 5.1939 | 5.4864 | 0.6434 | 0.621 | 0.644 | LR 비교의 기준점, test acc는 LR 축에서 가장 높음 |
+| LR-High | learning_rate | 192 | 4 | 0.1 | 5e-4 | 3 | **4.8904** | **5.2898** | 0.6335 | 0.628 | 0.637 | LM loss와 val acc는 가장 좋지만 test acc는 Base보다 낮음 |
+| **Dropout-0.0** | dropout | 192 | 4 | 0.0 | 3e-4 | 3 | 5.0257 | 5.3455 | 0.6581 | **0.688** | **0.702** | 전체 val/test acc 최고, train-val gap이 커 과적합 주의 |
+| Dropout-0.1 | dropout | 192 | 4 | 0.1 | 3e-4 | 3 | 5.1939 | 5.4864 | 0.6434 | 0.621 | 0.644 | dropout 비교 기준점, 정확도는 0.0보다 낮음 |
+| Dropout-0.2 | dropout | 192 | 4 | 0.2 | 3e-4 | 3 | 5.4300 | 5.6255 | 0.7260 | 0.523 | 0.544 | dropout이 커져 underfitting 경향 |
 
 ![Light validation accuracy 비교](diagrams/report_graphs/01_light_sentiment_val_accuracy.png)
 
-위 그래프에서 `Model-Base`가 Light 후보 중 가장 높은 sentiment validation accuracy를 보였다. 따라서 Light 단계의 목적은 최종 성능을 확정하는 것이 아니라, 큰 Basic 실험으로 가져갈 후보를 합리적으로 좁히는 것이었다.
+위 그래프에서는 전체 후보 중 `Dropout-0.0`이 sentiment validation accuracy `0.688`, test accuracy `0.702`로 가장 높았다. model size 축만 보면 `Model-Large`가 validation accuracy `0.682`, test accuracy `0.686`으로 가장 높았다. 다만 `Dropout-0.0`은 train accuracy와 validation accuracy의 차이가 커 과적합 가능성이 있으므로, Light 단계의 목적은 단순 최고값 하나를 확정하는 것이 아니라 Basic 실험으로 가져갈 후보와 리스크를 함께 좁히는 것이었다.
 
 ![Light loss 비교](diagrams/report_graphs/02_light_loss_comparison.png)
 
@@ -404,25 +383,25 @@ token IDs
 | Basic | `corpus[:1500000]`, `vocab_size=3000`, `context_length=128` | Light에서 고른 조합을 더 큰 설정에 적용 |
 
 
-표를 해석할 때는 `Model-Base`를 기준점으로 두었다.
+표를 해석할 때는 `Model-Base` 계열 설정을 기준점으로 두었다.
 
 - 먼저 model size 실험에서 `Model-Small`, `Model-Base`, `Model-Large`를 비교해 기본 모델 크기를 정했다.
-- 이후 `Model-Base`의 구조를 유지한 상태에서 learning rate만 `1e-4`, `3e-4`, `5e-4`로 바꿔 학습 안정성을 확인했다.
-- dropout 실험은 `0.0`, `0.2`를 비교해 정규화가 sentiment validation accuracy에 주는 영향을 확인했다.
+- 이후 `Model-Base`의 구조를 유지한 상태에서 `LR-Low`, `LR-Base`, `LR-High`를 비교해 learning rate가 학습 안정성에 주는 영향을 확인했다.
+- dropout 실험은 `Dropout-0.0`, `Dropout-0.1`, `Dropout-0.2`를 비교해 정규화가 sentiment validation accuracy에 주는 영향을 확인했다.
 
 즉 이 표의 목적은 모든 값을 한 번에 바꾸는 것이 아니라, `Model-Base`를 중심으로 한 축씩 바꿔 어떤 하이퍼파라미터가 성능에 영향을 주는지 확인하는 것이다.
 
 --- 
 
-## 9. Basic 설정 적용 결과
+## 8. Basic 설정 적용 결과
 
-Light 실험에서 선택한 조합을 Basic 설정에 적용했다.
+Light 실험에서 당시 선택한 조합을 Basic 설정에 적용했다.
 
 ![Light vs Basic sentiment accuracy](diagrams/report_graphs/03_basic_sentiment_accuracy.png)
 
 이 그래프는 Light에서 고른 조합을 Basic으로 확장하고 epoch를 늘렸을 때 downstream sentiment accuracy가 어떻게 바뀌었는지 보여준다. 다만 Light와 Basic은 corpus, vocab_size, context_length, epoch가 함께 바뀌었기 때문에, 이 상승을 특정 파라미터 하나의 효과라고 단정하면 안 된다. 더 정확히는 Light에서 후보를 선별하고 Basic에서 확장 가능성을 확인한 결과다.
 
-| 항목 | Light 최종 선택 | Basic 적용 |
+| 항목 | 당시 Light 기준 | Basic 적용 |
 | --- | ---: | ---: |
 | corpus_chars | 500,000 | 1,500,000 |
 | vocab_size | 2,000 | 3,000 |
@@ -461,7 +440,9 @@ Basic loss가 Light보다 높게 보이는 이유는 성능이 나빠졌다는 �
 ---
 
 
-## 10. 디버깅 기록: 생성 샘플 decode 오류
+## 9. 디버깅 및 실험 해석 주의점
+
+### 9.1 생성 샘플 decode 오류
 
 Basic 사전 학습 중 다음과 같은 흐름까지는 정상적으로 진행되었다.
 
@@ -545,9 +526,9 @@ generated_text = tokenizer.decode(
 - padding token은 실제 문장이 아니므로 대표 벡터로 쓰면 안 된다.
 - 따라서 `<pad>`가 아닌 마지막 token 위치를 찾아 그 hidden state를 classifier에 넣었다.
 
-Light 실험에서 최종 선택 기준이 sentiment validation accuracy였기 때문에, 미세 조정 결과는 하이퍼파라미터 선택의 핵심 지표로 사용했다.
+Basic 확장 당시에는 sentiment validation accuracy를 핵심 기준으로 삼았기 때문에, 미세 조정 결과를 하이퍼파라미터 선택의 주요 지표로 사용했다.
 
-| 최종 Light 선택 | train loss | train acc | val loss | val acc | test loss | test acc |
+| Basic 적용 당시 Light 기준 | train loss | train acc | val loss | val acc | test loss | test acc |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Model-Base | 0.7023 | 0.554 | 0.6251 | 0.642 | 0.6199 | 0.645 |
 
@@ -565,40 +546,6 @@ Basic fine-tuning 결과는 `sentiment_basic.json`의 마지막 기록을 기준
 | Basic, pretrain 10 epochs | 0.5003 | 0.7517 | 0.4260 | 0.8080 | 0.4337 | 0.8047 |
 
 Light 마지막 재실행에서 test accuracy가 `0.618`에 머문 것은 epoch와 데이터 규모가 부족해 backbone이 충분히 수렴하지 못했을 가능성을 보여준다. Basic에서는 사전 학습 epoch를 `10`으로 늘려 더 많은 update를 수행했고, 이후 sentiment fine-tuning에서 test accuracy가 `0.8047`까지 올라갔다. 따라서 이 결과는 "큰 설정이 무조건 좋다"라기보다, 큰 설정을 사용할 때는 그에 맞는 충분한 학습 epoch가 함께 필요하다는 해석이 더 적절하다.
-
----
-## 8. 보고서 요약
-
-이 프로젝트의 목표는 PyTorch만 사용해서 mini GPT를 직접 구현하고, NSMC 영화 리뷰 데이터로 사전 학습과 감성 분류 미세 조정을 수행하는 것이다.
-
-
-> Light 설정에서 `model_size`, `learning rate`, `dropout`을 바꿔 보았을 때, 어떤 조합이 감성 분류 성능까지 가장 안정적으로 이어지는가?
-
-실험은 먼저 빠른 비교가 가능한 Light 설정에서 진행했다.
-
-| 단계 | 설정 | 목적 |
-| --- | --- | --- |
-| Smoke | `corpus[:5000]`, `vocab_size=300`, `context_length=32` | BPE와 한 배치 학습 확인 |
-| Light | `corpus[:500000]`, `vocab_size=2000`, `context_length=64` | 여러 하이퍼파라미터 후보를 빠르게 비교 |
-| Basic | `corpus[:1500000]`, `vocab_size=3000`, `context_length=128` | Light에서 고른 조합을 더 큰 설정에 적용 |
-
-최종 선택 기준은 다음 순서로 고정했다.
-
-1. `sentiment validation accuracy`가 높은 조합
-2. validation accuracy가 비슷하면 `sentiment validation loss`가 낮은 조합
-3. 둘 다 비슷하면 더 작은 모델
-
-이 기준으로 Light 실험에서 가장 좋은 선택은 `Model-Base`였다.
-
-| 선택 항목 | 최종 값 |
-| --- | --- |
-| `emb_dim` | 192 |
-| `n_layers` | 4 |
-| `n_heads` | 4 |
-| `drop_rate` | 0.1 |
-| `lr` | 3e-4 |
-
-왜 이 선택을 했는지의 핵심은 단순히 loss 하나만 낮았기 때문이 아니다. 사전 학습 loss가 낮아지는 것과 실제 downstream task인 감성 분류 validation accuracy가 함께 안정적으로 나오는 조합을 우선했다.
 
 ---
 
