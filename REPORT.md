@@ -126,11 +126,6 @@ Basic 확장에서는 먼저 Light 실험에서 validation accuracy가 높았던
       <td><code>data/vocab_basic_3000.json</code></td>
     </tr>
     <tr>
-      <td>어휘 학습 시간</td>
-      <td>미기록(JSON 미포함)</td>
-      <td>미기록(JSON 미포함)</td>
-    </tr>
-    <tr>
       <td>인코딩/디코딩 복원</td>
       <td colspan="2"><code>decode(encode("이 영화는 좋았다! English 123", add_bos_eos=True), skip_special=True) == "이 영화는 좋았다! English 123"</code></td>
     </tr>
