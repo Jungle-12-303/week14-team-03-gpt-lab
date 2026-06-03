@@ -1,0 +1,33 @@
+flowchart LR
+    %% GPT language-model training flow
+
+    T0["1. NSMC text<br/>영화 리뷰 원문"]:::data
+    T1["2. UTF-8 byte-level BPE tokenizer<br/>문자열 -> token IDs"]:::tok
+    D0["3. GPTDataset<br/>input / target 생성"]:::data
+    E0["4. InputEmbedding<br/>token embedding + position embedding"]:::embed
+    B0["5. TransformerBlock x N<br/>causal attention + FFN + residual"]:::model
+    N0["6. final LayerNorm<br/>hidden state 안정화"]:::model
+    H0["7. LM head<br/>hidden -> vocab logits"]:::head
+    P0["8. 다음 토큰 예측<br/>각 위치의 다음 token 확률"]:::out
+    L0["9. CrossEntropy loss<br/>logits와 target 비교"]:::loss
+    O0["10. optimizer.step<br/>모델 파라미터 업데이트"]:::train
+
+    T0 -->|"리뷰 문장을 숫자로 바꾸기 위해"| T1
+    T1 -->|"연속 token IDs"| D0
+    D0 -->|"input_ids / target_ids"| E0
+    E0 -->|"위치 정보가 포함된 벡터"| B0
+    B0 -->|"문맥이 반영된 hidden states"| N0
+    N0 -->|"정규화된 hidden states"| H0
+    H0 -->|"vocab_size개 후보 점수"| P0
+    P0 -->|"정답 target과 비교"| L0
+    L0 -->|"gradient 계산 후"| O0
+    O0 -. "반복 학습" .-> E0
+
+    classDef data fill:#FFF7ED,stroke:#EA580C,stroke-width:1.4px,color:#0F172A;
+    classDef tok fill:#F7FEE7,stroke:#65A30D,stroke-width:1.4px,color:#0F172A;
+    classDef embed fill:#EFF6FF,stroke:#2563EB,stroke-width:1.4px,color:#0F172A;
+    classDef model fill:#F5F3FF,stroke:#7C3AED,stroke-width:1.4px,color:#0F172A;
+    classDef head fill:#ECFDF5,stroke:#059669,stroke-width:1.4px,color:#0F172A;
+    classDef out fill:#FEFCE8,stroke:#CA8A04,stroke-width:1.4px,color:#0F172A;
+    classDef loss fill:#FEF2F2,stroke:#DC2626,stroke-width:1.4px,color:#0F172A;
+    classDef train fill:#F8FAFC,stroke:#475569,stroke-width:1.4px,color:#0F172A;

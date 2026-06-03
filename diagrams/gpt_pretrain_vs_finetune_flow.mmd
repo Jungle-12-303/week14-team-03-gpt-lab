@@ -1,0 +1,46 @@
+flowchart LR
+    %% GPT pretraining and sentiment fine-tuning flow
+
+    subgraph SHARED["공통 전처리"]
+        direction LR
+        S0["1. NSMC review text<br/>리뷰 문자열"]:::data
+        S1["2. BPE tokenizer<br/>같은 vocab / merge rules 사용"]:::tok
+        S2["3. token ID 배열<br/>GPT가 받을 숫자 입력"]:::tok
+    end
+
+    subgraph PRE["사전 학습: 다음 토큰 예측"]
+        direction LR
+        P0["4A. LM corpus<br/>리뷰 텍스트 묶음"]:::data
+        P1["5A. GPTDataset<br/>input / target 한 칸 shift"]:::data
+        P2["6A. GPTModel<br/>embedding + TransformerBlock x N"]:::model
+        P3["7A. LM head<br/>vocab 후보 점수"]:::head
+        P4["8A. loss 계산<br/>예측 token vs 실제 다음 token"]:::loss
+        P5["9A. optimizer.step<br/>GPT backbone 학습"]:::train
+    end
+
+    subgraph FT["감성 분류 fine-tuning: label 예측"]
+        direction LR
+        F0["4B. sentiment JSONL<br/>text + label"]:::data
+        F1["5B. ReviewSentimentDataset<br/>리뷰별 input_ids + label"]:::data
+        F2["6B. GPT backbone<br/>사전 학습 표현 재사용"]:::model
+        F3["7B. classification head<br/>부정 / 긍정 logits"]:::head
+        F4["8B. loss / accuracy<br/>예측 label vs 실제 label"]:::loss
+        F5["9B. validation / test score<br/>모델 선택과 최종 평가"]:::eval
+    end
+
+    S0 --> S1 --> S2
+
+    S2 -->|"다음 토큰 학습용"| P0
+    P0 --> P1 --> P2 --> P3 --> P4 --> P5
+    P5 -. "학습된 backbone" .-> F2
+
+    S2 -->|"감성 분류용"| F0
+    F0 --> F1 --> F2 --> F3 --> F4 --> F5
+
+    classDef data fill:#FFF7ED,stroke:#EA580C,stroke-width:1.4px,color:#0F172A;
+    classDef tok fill:#F7FEE7,stroke:#65A30D,stroke-width:1.4px,color:#0F172A;
+    classDef model fill:#F5F3FF,stroke:#7C3AED,stroke-width:1.4px,color:#0F172A;
+    classDef head fill:#ECFDF5,stroke:#059669,stroke-width:1.4px,color:#0F172A;
+    classDef loss fill:#FEF2F2,stroke:#DC2626,stroke-width:1.4px,color:#0F172A;
+    classDef train fill:#EFF6FF,stroke:#2563EB,stroke-width:1.4px,color:#0F172A;
+    classDef eval fill:#FEFCE8,stroke:#CA8A04,stroke-width:1.4px,color:#0F172A;
