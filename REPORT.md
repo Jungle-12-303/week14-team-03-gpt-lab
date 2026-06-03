@@ -184,11 +184,6 @@ BPE는 UTF-8 byte-level 방식으로 구현했다. 한국어는 한 글자가 UT
 
 ---
 
-이 구조를 선택한 이유는 GPT가 autoregressive language model이기 때문이다. 현재 위치의 토큰은 미래 토큰을 보면 안 되므로 attention에 causal mask를 적용했다. 또한 깊은 block을 통과하면서 gradient가 불안정해지는 것을 줄이기 위해 shortcut connection과 LayerNorm을 사용했다.
-
-
----
-
 ## 6. 실험 설계와 가설
 
 ##### Light 모델을 통해 최적의 하이퍼 파라미터를 구하기 위한 테스트 과정을 진행 
