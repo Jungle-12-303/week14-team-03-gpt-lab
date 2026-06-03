@@ -198,6 +198,12 @@ BPE는 UTF-8 byte-level 방식으로 구현했다. 한국어는 한 글자가 UT
 
 ##### Light 모델을 통해 최적의 하이퍼 파라미터를 구하기 위한 테스트 과정을 진행 
 
+| 단계 | 설정 | 목적 |
+| --- | --- | --- |
+| Smoke | `corpus[:5000]`, `vocab_size=300`, `context_length=32` | BPE와 한 배치 학습 확인 |
+| Light | `corpus[:500000]`, `vocab_size=2000`, `context_length=64` | 여러 하이퍼파라미터 후보를 빠르게 비교 |
+| Basic | `corpus[:1500000]`, `vocab_size=3000`, `context_length=128` | Light에서 고른 조합을 더 큰 설정에 적용 |
+
 ### 6.1 공통 Light 설정
 
 | 항목 | 값 |
@@ -321,36 +327,18 @@ BPE는 UTF-8 byte-level 방식으로 구현했다. 한국어는 한 글자가 UT
 
 첨부 JSON 기준 결과는 다음과 같다.
 
-| 설정 | drop_rate | sentiment val acc | sentiment test acc | train-val acc gap |
-| --- | ---: | ---: | ---: | ---: |
-| Dropout-0.0 | 0.0 | **0.688** | **0.702** | +12.4%p |
-| Dropout-0.1 | 0.1 | 0.621 | 0.644 | -4.7%p |
-| Dropout-0.2 | 0.2 | 0.523 | 0.544 | +3.8%p |
+| 설정 | drop_rate | sentiment train acc | sentiment val acc | sentiment test acc | train-val acc gap |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Dropout-0.0 | 0.0 | 0.8116 | **0.688** | **0.702** | +12.4%p |
+| Dropout-0.1 | 0.1 | 0.5736 | 0.621 | 0.644 | -4.7%p |
+| Dropout-0.2 | 0.2 | 0.5610 | 0.523 | 0.544 | +3.8%p |
+
 
 해석:
 
 - **`drop_rate=0.1`이 가장 균형점일 것이라는 가설은 첨부 JSON 기준으로는 틀렸다.** 가장 높은 validation/test accuracy는 dropout을 끈 `0.0`에서 나왔다.
 - 다만 `Dropout-0.0`은 train accuracy가 validation accuracy보다 12.4%p 높아, 학습 데이터에 더 강하게 맞춰진 overfitting 가능성이 있다.
 - `Dropout-0.2`는 validation/test accuracy가 크게 낮아졌으므로, dropout이 너무 크면 학습 신호가 약해져 underfitting이 날 수 있다는 부분은 지지된다.
-
-### 6.5 Basic 확장 가설
-
-가설:
-
-> Light에서 validation accuracy가 높았던 조합을 Basic 설정에 먼저 적용하면 더 많은 corpus, 더 큰 vocabulary, 더 긴 context를 사용하므로 더 긴 문맥을 학습할 수 있다. 다만 모델 용량이 크고 dropout이 없으며 learning rate가 높으면, Basic의 긴 학습 과정에서 train corpus에 과하게 맞춰져 validation loss가 높아질 수 있다.
-
-추가 가설:
-
-> Light fine-tuning의 마지막 재실행에서는 3 epoch 이후 test accuracy가 `0.618`에 머물렀다. 이는 모델 구조 자체의 한계만이 아니라, 같은 데이터와 제한된 학습 시간 안에서 충분히 수렴하지 못한 영향일 수 있다. 따라서 Basic에서는 사전 학습 epoch를 `10`으로 늘려 backbone이 더 충분히 수렴하도록 하고, 그 결과 downstream sentiment accuracy가 높아지는지 확인한다.
-
-왜 이런 가설을 세웠는가:
-
-- corpus가 커지면 모델이 더 다양한 리뷰 표현을 볼 수 있다.
-- vocab_size가 커지면 자주 등장하는 byte sequence를 더 긴 token으로 묶을 수 있어 tokenization 효율이 좋아질 수 있다.
-- context_length가 64에서 128로 늘어나면 더 긴 리뷰 문맥을 한 번에 볼 수 있다.
-- 대신 vocab 후보가 늘어나면 다음 토큰 예측 문제가 더 넓은 선택지 위에서 계산되므로, 초기 loss 숫자는 Light보다 높게 보일 수 있다.
-- epoch를 늘리면 같은 모델이라도 parameter update 횟수가 늘어나므로, 3 epoch에서 부족했던 수렴을 더 진행할 수 있다.
-- 하지만 `emb_dim=256`, `drop_rate=0.0`, `lr=5e-4`처럼 용량과 update 폭이 크고 정규화가 약한 조합은 train loss만 빠르게 낮추고 validation loss를 악화시킬 수 있다.
 
 ---
 
@@ -420,14 +408,6 @@ Light 실험에서 validation accuracy가 높았던 값을 그대로 따르면 1
 
 위 선그래프에서 1차 후보는 train loss가 `2.7819`까지 낮아졌지만 validation loss는 `6.6285`까지 올라갔다. 반면 최종 안정 설정은 train loss는 `4.8838`로 더 높지만 validation loss가 `5.4538`로 낮고, train-validation gap도 훨씬 작다.
 
-![Basic 1차 후보와 최종 안정 설정 gap](diagrams/report_graphs/22_basic_candidate_pretrain_gap_bar.png)
-
-| 설정 | 마지막 eval train loss | 마지막 eval val loss | val-train gap | 해석 |
-| --- | ---: | ---: | ---: | --- |
-| 1차 후보: `256`, `drop_rate=0.0`, `lr=5e-4` | 2.7819 | 6.6285 | 3.8466 | train corpus에 과하게 맞춰진 과적합 신호 |
-| 최종 안정 설정: `192`, `drop_rate=0.1`, `lr=3e-4` | 4.8838 | 5.4538 | 0.5700 | validation loss와 gap이 낮아져 일반화가 안정적 |
-
-![Basic 1차 후보와 최종 안정 설정 sentiment accuracy](diagrams/report_graphs/23_basic_candidate_sentiment_accuracy.png)
 
 감성 분류에서도 최종 안정 설정이 더 높았다.
 
@@ -439,11 +419,44 @@ Light 실험에서 validation accuracy가 높았던 값을 그대로 따르면 1
 따라서 Basic 실험의 결론은 "Light에서 가장 높았던 값을 그대로 확정한다"가 아니다. Light 결과는 1차 후보를 고르는 데 사용했고, Basic에서는 더 긴 학습과 더 큰 데이터에서 나타나는 과적합 신호를 확인한 뒤 안정적인 최종 설정으로 조정했다.
 
 ---
+## 9. 미세 조정
+
+감성 분류는 NSMC 리뷰를 부정 `0`, 긍정 `1`로 분류하는 task다. 구현에서는 GPT의 `lm_head`를 그대로 사용하지 않고, GPT backbone의 마지막 유효 token hidden state를 문장 대표 벡터로 사용한 뒤 Linear classifier를 붙였다.
+
+왜 마지막 유효 token을 사용했는가:
+
+- GPT는 causal model이므로 뒤쪽 token일수록 앞 문맥을 더 많이 본다.
+- padding token은 실제 문장이 아니므로 대표 벡터로 쓰면 안 된다.
+- 따라서 `<pad>`가 아닌 마지막 token 위치를 찾아 그 hidden state를 classifier에 넣었다.
+
+Basic 확장에서는 sentiment validation accuracy를 핵심 기준으로 삼았기 때문에, 미세 조정 결과를 하이퍼파라미터 선택의 주요 지표로 사용했다.
+
+| Light 단계 기준 후보 | train loss | train acc | val loss | val acc | test loss | test acc |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Model-Base | 0.7023 | 0.554 | 0.6251 | 0.642 | 0.6199 | 0.645 |
+
+추가로 프로젝트 내부 `results/sentiment_light.json`에는 같은 Base 계열 설정의 별도 실행 결과가 저장되어 있었다.
+
+| 결과 파일 | val loss | val acc | test loss | test acc | 비고 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `results/sentiment_light.json` | 0.6505 | 0.638 | 0.6235 | 0.657 | 첫 번째 기록 기준 |
+| `results/sentiment_light.json` | 0.6445 | 0.634 | 0.6447 | 0.618 | 마지막 3 epoch 기록 기준 |
+
+Basic fine-tuning 결과는 1차 후보와 최종 안정 설정의 마지막 평가 기록을 기준으로 비교했다.
+
+| 설정 | train loss | train acc | val loss | val acc | test loss | test acc |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1차 후보: `256`, `drop_rate=0.0`, `lr=5e-4` | 0.5247 | 0.7356 | 0.4706 | 0.7801 | 0.4767 | 0.7752 |
+| 최종 안정 설정: `192`, `drop_rate=0.1`, `lr=3e-4` | 0.5003 | 0.7517 | 0.4260 | 0.8080 | 0.4337 | 0.8047 |
+
+Light 마지막 재실행에서 test accuracy가 `0.618`에 머문 것은 epoch와 데이터 규모가 부족해 backbone이 충분히 수렴하지 못했을 가능성을 보여준다. Basic에서는 사전 학습 epoch를 `10`으로 늘려 더 많은 update를 수행했다. 다만 `emb_dim=256`, `drop_rate=0.0`, `lr=5e-4` 1차 후보는 pretraining train loss만 과하게 낮아지고 validation loss가 높아졌으므로, 최종적으로 `emb_dim=192`, `drop_rate=0.1`, `lr=3e-4` 안정 설정을 채택했다. 이 설정에서 sentiment test accuracy가 `0.8047`까지 올라갔다.
+
+---
 
 
-## 9. 디버깅 및 실험 해석 주의점
+## 10. 디버깅 및 실험 해석 주의점
 
-### 9.1 생성 샘플 decode 오류
+### 10.1 생성 샘플 decode 오류
 
 Basic 사전 학습 중 다음과 같은 흐름까지는 정상적으로 진행되었다.
 
@@ -498,7 +511,7 @@ generated_text = tokenizer.decode(
 
 이렇게 하면 학습 초반에 생성 샘플 일부가 `�`로 깨져 보일 수는 있지만, loss 평가와 결과 JSON 저장은 계속된다. 발표에서는 이 오류를 "학습 실패"가 아니라 "생성 샘플 로깅 단계의 UTF-8 복원 문제"로 설명하는 것이 정확하다.
 
-### 9.2 `corpus_chars`를 무조건 키워도 의미가 없는 이유
+### 10.2 `corpus_chars`를 무조건 키워도 의미가 없는 이유
 
 `corpus_chars`는 "학습에 사용할 문자열을 앞에서 몇 글자까지 자를 것인가"를 정하는 값이다. 따라서 원본 학습 텍스트보다 큰 값을 넣어도 실제 데이터가 자동으로 늘어나지는 않는다.
 
@@ -517,39 +530,7 @@ generated_text = tokenizer.decode(
 
 ---
 
-## 10. 미세 조정
 
-감성 분류는 NSMC 리뷰를 부정 `0`, 긍정 `1`로 분류하는 task다. 구현에서는 GPT의 `lm_head`를 그대로 사용하지 않고, GPT backbone의 마지막 유효 token hidden state를 문장 대표 벡터로 사용한 뒤 Linear classifier를 붙였다.
-
-왜 마지막 유효 token을 사용했는가:
-
-- GPT는 causal model이므로 뒤쪽 token일수록 앞 문맥을 더 많이 본다.
-- padding token은 실제 문장이 아니므로 대표 벡터로 쓰면 안 된다.
-- 따라서 `<pad>`가 아닌 마지막 token 위치를 찾아 그 hidden state를 classifier에 넣었다.
-
-Basic 확장에서는 sentiment validation accuracy를 핵심 기준으로 삼았기 때문에, 미세 조정 결과를 하이퍼파라미터 선택의 주요 지표로 사용했다.
-
-| Light 단계 기준 후보 | train loss | train acc | val loss | val acc | test loss | test acc |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Model-Base | 0.7023 | 0.554 | 0.6251 | 0.642 | 0.6199 | 0.645 |
-
-추가로 프로젝트 내부 `results/sentiment_light.json`에는 같은 Base 계열 설정의 별도 실행 결과가 저장되어 있었다.
-
-| 결과 파일 | val loss | val acc | test loss | test acc | 비고 |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `results/sentiment_light.json` | 0.6505 | 0.638 | 0.6235 | 0.657 | 첫 번째 기록 기준 |
-| `results/sentiment_light.json` | 0.6445 | 0.634 | 0.6447 | 0.618 | 마지막 3 epoch 기록 기준 |
-
-Basic fine-tuning 결과는 1차 후보와 최종 안정 설정의 마지막 평가 기록을 기준으로 비교했다.
-
-| 설정 | train loss | train acc | val loss | val acc | test loss | test acc |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1차 후보: `256`, `drop_rate=0.0`, `lr=5e-4` | 0.5247 | 0.7356 | 0.4706 | 0.7801 | 0.4767 | 0.7752 |
-| 최종 안정 설정: `192`, `drop_rate=0.1`, `lr=3e-4` | 0.5003 | 0.7517 | 0.4260 | 0.8080 | 0.4337 | 0.8047 |
-
-Light 마지막 재실행에서 test accuracy가 `0.618`에 머문 것은 epoch와 데이터 규모가 부족해 backbone이 충분히 수렴하지 못했을 가능성을 보여준다. Basic에서는 사전 학습 epoch를 `10`으로 늘려 더 많은 update를 수행했다. 다만 `emb_dim=256`, `drop_rate=0.0`, `lr=5e-4` 1차 후보는 pretraining train loss만 과하게 낮아지고 validation loss가 높아졌으므로, 최종적으로 `emb_dim=192`, `drop_rate=0.1`, `lr=3e-4` 안정 설정을 채택했다. 이 설정에서 sentiment test accuracy가 `0.8047`까지 올라갔다.
-
----
 
 ## 11. 최종 안정 설정을 선택한 근거: `emb_dim=192` vs `emb_dim=256`
 
