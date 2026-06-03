@@ -1,0 +1,90 @@
+{
+  "initial_candidate": {
+    "name": "Initial candidate",
+    "config": {
+      "vocab_size": 3000,
+      "context_length": 128,
+      "emb_dim": 256,
+      "n_heads": 4,
+      "n_layers": 4,
+      "drop_rate": 0.0,
+      "qkv_bias": false
+    },
+    "learning_rate": "5e-4",
+    "num_epochs": 10,
+    "last_global_step": 7830,
+    "last_train_loss": 2.7819361329078673,
+    "last_val_loss": 6.628515410423279,
+    "gap": 3.8465792775154113,
+    "sentiment": {
+      "train": {
+        "split": "train",
+        "epoch": 10,
+        "loss": 0.5247219286390506,
+        "accuracy": 0.7356223175965665,
+        "num_examples": 107180
+      },
+      "val": {
+        "split": "val",
+        "epoch": 10,
+        "loss": 0.47056598571994707,
+        "accuracy": 0.7801266230282219,
+        "num_examples": 9319
+      },
+      "test": {
+        "split": "test",
+        "epoch": 10,
+        "loss": 0.4767348834077609,
+        "accuracy": 0.7751865111906714,
+        "num_examples": 49997
+      }
+    },
+    "curve_points": 39,
+    "source_pretrain": "/Users/juhoseok/Downloads/1차 후보 /pretrain_light_dim256_lr5e_4.json",
+    "source_sentiment": "/Users/juhoseok/Downloads/1차 후보 /sentiment_light_dim256_lr5e_4.json"
+  },
+  "final_stable": {
+    "name": "Final stable",
+    "config": {
+      "vocab_size": 3000,
+      "context_length": 128,
+      "emb_dim": 192,
+      "n_heads": 4,
+      "n_layers": 4,
+      "drop_rate": 0.1,
+      "qkv_bias": false
+    },
+    "learning_rate": "3e-4",
+    "num_epochs": 10,
+    "last_global_step": 7830,
+    "last_train_loss": 4.883791422843933,
+    "last_val_loss": 5.453805446624756,
+    "gap": 0.5700140237808231,
+    "sentiment": {
+      "train": {
+        "split": "train",
+        "epoch": 1,
+        "loss": 0.5002800404358142,
+        "accuracy": 0.751744728494122,
+        "num_examples": 107180
+      },
+      "val": {
+        "split": "val",
+        "epoch": 1,
+        "loss": 0.42595675082367396,
+        "accuracy": 0.8080266122974568,
+        "num_examples": 9319
+      },
+      "test": {
+        "split": "test",
+        "epoch": 1,
+        "loss": 0.43372761825538864,
+        "accuracy": 0.8047282836970219,
+        "num_examples": 49997
+      }
+    },
+    "curve_points": 39,
+    "source_pretrain": "/Users/juhoseok/Downloads/최종 안정 설정/pretrain_basic(emb_dim(192).json",
+    "source_sentiment": "/Users/juhoseok/Downloads/최종 안정 설정/sentiment_basic(emb_dim(192).json"
+  }
+}
