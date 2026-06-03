@@ -9,41 +9,6 @@
 | 팀원 | (미입력) |
 
 ---
-
-## 1. 보고서 요약
-
-이 프로젝트의 목표는 PyTorch만 사용해서 mini GPT를 직접 구현하고, NSMC 영화 리뷰 데이터로 사전 학습과 감성 분류 미세 조정을 수행하는 것이다.
-
-
-> Light 설정에서 `model_size`, `learning rate`, `dropout`을 바꿔 보았을 때, 어떤 조합이 감성 분류 성능까지 가장 안정적으로 이어지는가?
-
-실험은 먼저 빠른 비교가 가능한 Light 설정에서 진행했다.
-
-| 단계 | 설정 | 목적 |
-| --- | --- | --- |
-| Light | `corpus[:500000]`, `vocab_size=2000`, `context_length=64` | 여러 하이퍼파라미터 후보를 빠르게 비교 |
-| Basic | `corpus[:1500000]`, `vocab_size=3000`, `context_length=128` | Light에서 고른 조합을 더 큰 설정에 적용 |
-
-최종 선택 기준은 다음 순서로 고정했다.
-
-1. `sentiment validation accuracy`가 높은 조합
-2. validation accuracy가 비슷하면 `sentiment validation loss`가 낮은 조합
-3. 둘 다 비슷하면 더 작은 모델
-
-이 기준으로 Light 실험에서 가장 좋은 선택은 `Model-Base`였다.
-
-| 선택 항목 | 최종 값 |
-| --- | --- |
-| `emb_dim` | 192 |
-| `n_layers` | 4 |
-| `n_heads` | 4 |
-| `drop_rate` | 0.1 |
-| `lr` | 3e-4 |
-
-왜 이 선택을 했는지의 핵심은 단순히 loss 하나만 낮았기 때문이 아니다. 사전 학습 loss가 낮아지는 것과 실제 downstream task인 감성 분류 validation accuracy가 함께 안정적으로 나오는 조합을 우선했다.
-
----
-
 ## 2. 구현 현황
 
 | 단계 | 구현 내용 | 구현 파일 | 담당자 |
@@ -90,12 +55,15 @@ review text
 | 실행 명령 | 결과 | 비고 |
 | --- | --- | --- |
 | `./.venv/bin/python -m pytest tests/ -q` | `34 passed, 1 warning` | `plot_losses`의 non-interactive canvas warning 1개 |
+전처리 방식	빈 리뷰 제거, 공백 정리, train/validation 분리
+사용한 데이터 크기	Smoke / Light / Basic 중 선택 
+| 미세 조정 데이터 | `data/nsmc_sentiment_train.jsonl`, `data/nsmc_sentiment_val.jsonl`, `data/nsmc_sentiment_test.jsonl` |
+| 전처리 방식 | 빈 리뷰 제거, 공백 정리, train/validation 분리 |
+| 사용한 데이터 크기 | Light, Basic |
 
 ---
 
-## 4. 데이터와 BPE
-
-### 4.1 데이터
+## 4. 데이터
 
 | 항목 | 내용 |
 | --- | --- |
@@ -104,11 +72,11 @@ review text
 | 사전 학습 데이터 | `data/nsmc_lm_train.txt`, `data/nsmc_lm_val.txt` |
 | 미세 조정 데이터 | `data/nsmc_sentiment_train.jsonl`, `data/nsmc_sentiment_val.jsonl`, `data/nsmc_sentiment_test.jsonl` |
 | 전처리 방식 | 빈 리뷰 제거, 공백 정리, train/validation 분리 |
-| 감성 분류 train 개수 | 137,996 |
-| 감성 분류 validation 개수 | 11,999 |
-| 감성 분류 test 개수 | 49,997 |
+| 사용한 데이터 크기 |  Light / Basic |
 
-### 4.2 BPE 설정
+----
+
+### 5. BPE 설정
 
 | 항목 | Light | Basic |
 | --- | ---: | ---: |
@@ -117,6 +85,23 @@ review text
 | context_length | 64 | 128 |
 | vocabulary 저장 경로 | `data/vocab_light_2000.json` | `data/vocab_basic_3000.json` |
 | 어휘 학습 시간 | 미기록(JSON 미포함) | 미기록(JSON 미포함) |
+| 인코딩/디코딩 복원 예시 | (예: `decode(encode("이 영화는 좋았다")) == 원문`) 생각해보고|
+
+
+## 4. BPE
+
+| 항목 | 내용 |
+| --- | --- |
+| 구현 파일 | `src/bpe.py` |
+| BPE 방식 | UTF-8 byte-level BPE |
+| 특수 토큰 ID | `<pad>=0`, `<unk>=1`, `<bos>=2`, `<eos>=3` |
+| byte token ID 범위 | 4~259 |
+| vocab_size | (3000) |
+| 학습 corpus 크기 | (`corpus[:1_500_000]`) |
+| 어휘 학습 시간 | () |
+| vocabulary 저장 경로 | `data/vocab_light_2000.json` | `data/vocab_basic_3000.json` |
+| 인코딩/디코딩 복원 예시 | (예: `decode(encode("이 영화는 좋았다")) == 원문`) 생각해보고|
+
 
 BPE는 UTF-8 byte-level 방식으로 구현했다. 한국어는 한 글자가 UTF-8에서 여러 byte로 표현되기 때문에, 글자 단위나 공백 단위로 먼저 자르면 처음 보는 어미와 조사에서 `<unk>`가 많이 생길 수 있다. byte-level BPE를 쓰면 모든 한글, 영어, 숫자, 문장부호를 최소한 byte 단위로 표현할 수 있고, 자주 붙는 byte sequence만 merge하면서 vocabulary를 확장할 수 있다.
 
@@ -130,23 +115,6 @@ BPE는 UTF-8 byte-level 방식으로 구현했다. 한국어는 한 글자가 UT
 | `<eos>` | 3 |
 | byte token | 4~259 |
 | BPE merge token | 260 이상 |
-
-### 4.3 `corpus_chars`를 무조건 키워도 의미가 없는 이유
-
-`corpus_chars`는 "학습에 사용할 문자열을 앞에서 몇 글자까지 자를 것인가"를 정하는 값이다. 따라서 원본 학습 텍스트보다 큰 값을 넣어도 실제 데이터가 자동으로 늘어나지는 않는다.
-
-현재 프로젝트의 LM 텍스트 길이는 다음과 같다.
-
-| 파일 | 문자 수 | UTF-8 byte 수 |
-| --- | ---: | ---: |
-| `data/nsmc_lm_train.txt` | 1,379,486 | 3,335,336 |
-| `data/nsmc_lm_val.txt` | 120,560 | 291,753 |
-
-예를 들어 현재 데이터만 사용한다면 `corpus[:5_000_000]`을 넣어도 실제로는 train 텍스트의 전체 길이인 약 138만 자까지만 사용된다. 즉 이 경우는 "500만 자 학습"이 아니라 "가지고 있는 전체 train corpus 학습"이다.
-
-이 점이 중요한 이유는 실험 해석 때문이다. `corpus_chars=1_500_000`과 `corpus_chars=5_000_000`을 비교한다고 말해도, 실제 데이터가 1,379,486자라면 두 실험은 거의 같은 데이터를 보는 실험이 된다. 더 큰 corpus 실험을 하려면 추가 리뷰 데이터를 붙이거나, 별도 말뭉치를 추가해야 한다. train/validation/test를 섞으면 글자 수는 늘릴 수 있지만 평가 데이터가 학습에 들어가는 leakage가 생기므로, 성능 평가 목적에서는 사용하지 않는 것이 맞다.
-
-![corpus_chars 한계](diagrams/report_graphs/06_corpus_chars_limit.png)
 
 ---
 
@@ -163,27 +131,34 @@ token IDs
 -> TransformerBlock x n_layers
    - LayerNorm
    - Causal Multi-Head Self-Attention
-   - residual connection
+   - shortcut connection
    - LayerNorm
    - FeedForward
-   - residual connection
+   - shortcut connection
 -> final LayerNorm
 -> LM head
 -> vocab logits
 ```
 
-이 구조를 선택한 이유는 GPT가 autoregressive language model이기 때문이다. 현재 위치의 토큰은 미래 토큰을 보면 안 되므로 attention에 causal mask를 적용했다. 또한 깊은 block을 통과하면서 gradient가 불안정해지는 것을 줄이기 위해 residual connection과 LayerNorm을 사용했다.
+## 5. 모델 구조
 
-### 5.2 모델 크기별 파라미터 수 이건 왜있는거야 
+| 항목 | 내용 |
+| --- | --- |
+| 구현 파일 | `src/model.py` |
+| 전체 구조 | InputEmbedding -> N x TransformerBlock -> LayerNorm -> LM head |
+| vocab_size | (3000) |
+| context_length | (128) |
+| emb_dim | (192) |
+| n_heads | (4) |
+| n_layers | (4) |
+| drop_rate | (예: 0.1) |
+| qkv_bias | True / False |
+| 총 파라미터 수 | (?) |
 
-| 모델 | vocab_size | context_length | emb_dim | n_heads | n_layers | drop_rate | 파라미터 수 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Model-Small | 2,000 | 64 | 128 | 4 | 2 | 0.1 | 916,224 |
-| Model-Base-Light | 2,000 | 64 | 192 | 4 | 4 | 0.1 | 2,557,824 |
-| Model-Large-Light | 2,000 | 64 | 256 | 4 | 4 | 0.1 | 4,196,864 |
-| Basic-Base | 3,000 | 128 | 192 | 4 | 4 | 0.1 | 2,954,112 |
+---
 
-Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서도 Large보다 학습 비용이 낮기 때문이다. 특히 Light 설정에서는 데이터와 epoch가 제한되어 있으므로, 무조건 큰 모델이 좋은 선택이라고 보기 어렵다.
+이 구조를 선택한 이유는 GPT가 autoregressive language model이기 때문이다. 현재 위치의 토큰은 미래 토큰을 보면 안 되므로 attention에 causal mask를 적용했다. 또한 깊은 block을 통과하면서 gradient가 불안정해지는 것을 줄이기 위해 shortcut connection과 LayerNorm을 사용했다.
+
 
 ---
 
@@ -194,11 +169,28 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
 | 항목 | 값 |
 | --- | ---: |
 | corpus_chars | 500,000 |
-| vocab_size | 2,000 |
+| vocab_size |  2,000 |
 | context_length | 64 |
 | batch_size | 8 |
 | n_heads | 4 |
+| num_epochs | 3 |
+| eval_freq | 200 |
+| eval_iter | 20 |
 | start_context | `이 영화` |
+
+#### 확정 파라미터 값 (Basic)
+
+| 구분 | 항목 | 값 |
+| --- | --- | --- |
+| 모델 | vocab_size | 3,000 |
+| 모델 | context_length | 128 |
+| 모델 | emb_dim | 192 |
+| 모델 | n_heads | 4 |
+| 모델 | n_layers | 4 |
+| 학습 | batch_size | 8 |
+| 학습 | num_epochs | 10 |
+| 학습 | eval_freq, eval_iter | 200, 20 |
+| 최적화 | lr | 3e-4 |
 
 실험은 한 번에 모든 값을 바꾸지 않고, 가능한 한 하나의 축만 바꾸는 방식으로 설계했다. 이렇게 해야 어떤 변화가 결과에 영향을 주었는지 설명할 수 있기 때문이다.
 
@@ -208,7 +200,11 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
 
 가설:
 
-> 모델이 너무 작으면 한국어 리뷰의 표현과 문맥을 충분히 담지 못하고, 너무 크면 Light 데이터와 짧은 epoch 안에서 충분히 학습되지 않을 수 있다. 따라서 중간 크기의 Base 모델이 가장 안정적일 것이다.
+> 모델이 너무 작으면 한국어 리뷰의 표현과 문맥을 충분히 담지 못해 모델을 키우면 평가율이 높아질까?
+
+결과:
+
+> 너무 크면 Light 데이터와 짧은 epoch 안에서 충분히 학습되지 않을 수 있다. 따라서 중간 크기의 Base 모델이 가장 안정적일 것이다.
 
 왜 이런 가설을 세웠는가:
 
@@ -264,21 +260,6 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
 
 ### 7.1 전체 결과 표
 
-선정 기준은 사전 학습 loss가 아니라 감성 분류 validation accuracy를 1순위로 두었다. 이유는 최종 응용이 NSMC 감성 분류이고, 언어모델 loss만 낮아도 downstream task에서 잘 이어지지 않을 수 있기 때문이다.
-
-![Light validation accuracy 비교](diagrams/report_graphs/01_light_sentiment_val_accuracy.png)
-
-위 그래프에서 `Model-Base`가 Light 후보 중 가장 높은 sentiment validation accuracy를 보였다. 따라서 Light 단계의 목적은 최종 성능을 확정하는 것이 아니라, 큰 Basic 실험으로 가져갈 후보를 합리적으로 좁히는 것이었다.
-
-![Light loss 비교](diagrams/report_graphs/02_light_loss_comparison.png)
-
-손실 관점에서도 언어 모델 검증 손실과 감성 분류 검증 손실을 함께 확인해야 한다. 다음 토큰 예측 손실이 낮아지는 것만으로 하위 작업의 성능이 좋아진다고 확정할 수 없기 때문이다.
-
-
-| 단계 | 설정 | 목적 |
-| --- | --- | --- |
-| Light | `corpus[:500000]`, `vocab_size=2000`, `context_length=64` | 여러 하이퍼파라미터 후보를 빠르게 비교 |
-| Basic | `corpus[:1500000]`, `vocab_size=3000`, `context_length=128` | Light에서 고른 조합을 더 큰 설정에 적용 |
 
 <table>
   <thead>
@@ -314,7 +295,6 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
       <td align="right">0.634</td>
       <td align="right">0.607</td>
       <td>영화 리뷰 어휘는 나오지만 문장 연결이 불안정함</td>
-      <td>미기록(JSON 미포함)</td>
     </tr>
     <tr style="background-color: #fff3bf;">
       <td><strong>Model-Base (선택)</strong></td>
@@ -330,7 +310,6 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
       <td align="right"><strong>0.642</strong></td>
       <td align="right"><strong>0.645</strong></td>
       <td>리뷰 문장 형태가 가장 안정적으로 나타남</td>
-      <td>미기록(JSON 미포함)</td>
     </tr>
     <tr>
       <td>Model-Large</td>
@@ -346,7 +325,6 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
       <td align="right">0.588</td>
       <td align="right">0.571</td>
       <td>큰 모델이지만 epoch가 짧아 충분히 수렴하지 못함</td>
-      <td>미기록(JSON 미포함)</td>
     </tr>
     <tr>
       <td>LR-Low</td>
@@ -362,7 +340,6 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
       <td align="right">0.609</td>
       <td align="right">0.583</td>
       <td>loss 감소가 느리고 생성 문장이 불안정함</td>
-      <td>미기록(JSON 미포함)</td>
     </tr>
     <tr>
       <td>LR-High</td>
@@ -378,7 +355,6 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
       <td align="right">0.594</td>
       <td align="right">0.620</td>
       <td>빠른 update를 기대했지만 val acc는 낮음</td>
-      <td>미기록(JSON 미포함)</td>
     </tr>
     <tr>
       <td>Dropout-0.0</td>
@@ -394,7 +370,6 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
       <td align="right">0.616</td>
       <td align="right">0.618</td>
       <td>train/val 간 차이가 생기며 일반화 이득은 제한적</td>
-      <td>미기록(JSON 미포함)</td>
     </tr>
     <tr>
       <td>Dropout-0.2</td>
@@ -409,11 +384,25 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
       <td align="right">0.6774</td>
       <td align="right">0.533</td>
       <td align="right">0.553</td>
-      <td>dropout이 커지며 학습 신호가 약해진 것으로 보임</td>
-      <td>미기록(JSON 미포함)</td>
+      <td>dropout이 커지며 학습 신호가 약해진 것으로 보임</td> 
     </tr>
   </tbody>
 </table>
+
+![Light validation accuracy 비교](diagrams/report_graphs/01_light_sentiment_val_accuracy.png)
+
+위 그래프에서 `Model-Base`가 Light 후보 중 가장 높은 sentiment validation accuracy를 보였다. 따라서 Light 단계의 목적은 최종 성능을 확정하는 것이 아니라, 큰 Basic 실험으로 가져갈 후보를 합리적으로 좁히는 것이었다.
+
+![Light loss 비교](diagrams/report_graphs/02_light_loss_comparison.png)
+
+손실 관점에서도 언어 모델 검증 손실과 감성 분류 검증 손실을 함께 확인해야 한다. 다음 토큰 예측 손실이 낮아지는 것만으로 하위 작업의 성능이 좋아진다고 확정할 수 없기 때문이다.
+
+
+| 단계 | 설정 | 목적 |
+| --- | --- | --- |
+| Light | `corpus[:500000]`, `vocab_size=2000`, `context_length=64` | 여러 하이퍼파라미터 후보를 빠르게 비교 |
+| Basic | `corpus[:1500000]`, `vocab_size=3000`, `context_length=128` | Light에서 고른 조합을 더 큰 설정에 적용 |
+
 
 표를 해석할 때는 `Model-Base`를 기준점으로 두었다.
 
@@ -423,45 +412,9 @@ Model-Base를 중심 후보로 둔 이유는 Small보다 표현력이 크면서�
 
 즉 이 표의 목적은 모든 값을 한 번에 바꾸는 것이 아니라, `Model-Base`를 중심으로 한 축씩 바꿔 어떤 하이퍼파라미터가 성능에 영향을 주는지 확인하는 것이다.
 
-### 7.2 Model size 결과 해석
+--- 
 
-| 모델 | sentiment val acc | sentiment val loss | 해석 |
-| --- | ---: | ---: | --- |
-| Model-Small | 0.634 | 0.6467 | 작은 모델치고는 안정적이지만 표현력이 제한됨 |
-| Model-Base | 0.642 | 0.6251 | validation accuracy와 loss가 모두 가장 좋음 |
-| Model-Large | 0.588 | 0.6683 | 파라미터는 크지만 Light 조건에서 충분히 학습되지 못함 |
-
-Model-Base를 선택한 이유는 명확하다. validation accuracy가 가장 높고, validation loss도 가장 낮다. 또한 Model-Large보다 작기 때문에 같은 Colab 학습 환경에서 반복 실험하기 좋다.
-
-이 결과는 "모델을 크게 만들면 무조건 좋아진다"는 생각과 다르다. 데이터 크기, epoch 수, 학습 시간까지 같이 고려하면 적당한 크기의 모델이 더 안정적일 수 있다.
-
-### 7.3 Learning rate 결과 해석
-
-| lr | sentiment val acc | sentiment val loss | 해석 |
-| ---: | ---: | ---: | --- |
-| 1e-4 | 0.609 | 0.6642 | update가 작아 제한된 epoch 안에서 충분히 내려가지 못함 |
-| 3e-4 | 0.621 | 0.6509 | 세 후보 중 가장 안정적인 validation 성능 |
-| 5e-4 | 0.594 | 0.6658 | 빠른 학습을 기대했지만 validation 성능은 낮음 |
-
-learning rate 실험에서는 `3e-4`가 가장 좋은 선택이었다. `1e-4`는 안정적일 수 있지만 loss 감소가 느렸고, `5e-4`는 빠른 수렴을 기대했지만 validation accuracy가 낮았다.
-
-즉 이 실험에서 learning rate의 목적은 train loss를 0에 가깝게 만드는 것이 아니라, 제한된 학습 시간 안에서 validation 성능을 안정적으로 만드는 것이다.
-
-### 7.4 Dropout 결과 해석
-
-| drop_rate | sentiment val acc | sentiment val loss | 해석 |
-| ---: | ---: | ---: | --- |
-| 0.0 | 0.616 | 0.6444 | 규제가 없어서 일반화 이득이 제한적 |
-| 0.1 | 0.642 | 0.6251 | 최종 선택값. model_size 실험의 Base 결과 기준 |
-| 0.2 | 0.533 | 0.6774 | dropout이 커져 underfitting 가능성이 커짐 |
-
-dropout은 너무 낮아도, 너무 높아도 문제가 될 수 있다. `0.0`은 학습 데이터에 더 쉽게 맞춰질 수 있고, `0.2`는 작은 mini GPT에서 필요한 신호까지 자주 끊어 학습을 방해할 수 있다.
-
-다만 dropout 실험의 JSON은 `emb_dim=128`, `n_layers=4`로 저장되어 있어 Model-Base와 완전히 같은 조건은 아니었다. 따라서 이 결과는 "dropout 0.2가 절대 나쁘다"가 아니라, 이번 실험 조건에서는 `0.1`을 유지하는 편이 더 안전하다는 근거로 해석했다.
-
----
-
-## 8. Basic 설정 적용 결과
+## 9. Basic 설정 적용 결과
 
 Light 실험에서 선택한 조합을 Basic 설정에 적용했다.
 
@@ -507,7 +460,8 @@ Basic loss가 Light보다 높게 보이는 이유는 성능이 나빠졌다는 �
 
 ---
 
-## 9. 디버깅 기록: 생성 샘플 decode 오류
+
+## 10. 디버깅 기록: 생성 샘플 decode 오류
 
 Basic 사전 학습 중 다음과 같은 흐름까지는 정상적으로 진행되었다.
 
@@ -562,6 +516,23 @@ generated_text = tokenizer.decode(
 
 이렇게 하면 학습 초반에 생성 샘플 일부가 `�`로 깨져 보일 수는 있지만, loss 평가와 결과 JSON 저장은 계속된다. 발표에서는 이 오류를 "학습 실패"가 아니라 "생성 샘플 로깅 단계의 UTF-8 복원 문제"로 설명하는 것이 정확하다.
 
+### 9.2 `corpus_chars`를 무조건 키워도 의미가 없는 이유
+
+`corpus_chars`는 "학습에 사용할 문자열을 앞에서 몇 글자까지 자를 것인가"를 정하는 값이다. 따라서 원본 학습 텍스트보다 큰 값을 넣어도 실제 데이터가 자동으로 늘어나지는 않는다.
+
+현재 프로젝트의 LM 텍스트 길이는 다음과 같다.
+
+| 파일 | 문자 수 | UTF-8 byte 수 |
+| --- | ---: | ---: |
+| `data/nsmc_lm_train.txt` | 1,379,486 | 3,335,336 |
+| `data/nsmc_lm_val.txt` | 120,560 | 291,753 |
+
+예를 들어 현재 데이터만 사용한다면 `corpus[:5_000_000]`을 넣어도 실제로는 train 텍스트의 전체 길이인 약 138만 자까지만 사용된다. 즉 이 경우는 "500만 자 학습"이 아니라 "가지고 있는 전체 train corpus 학습"이다.
+
+이 점이 중요한 이유는 실험 해석 때문이다. `corpus_chars=1_500_000`과 `corpus_chars=5_000_000`을 비교한다고 말해도, 실제 데이터가 1,379,486자라면 두 실험은 거의 같은 데이터를 보는 실험이 된다. 더 큰 corpus 실험을 하려면 추가 리뷰 데이터를 붙이거나, 별도 말뭉치를 추가해야 한다. train/validation/test를 섞으면 글자 수는 늘릴 수 있지만 평가 데이터가 학습에 들어가는 leakage가 생기므로, 성능 평가 목적에서는 사용하지 않는 것이 맞다.
+
+![corpus_chars 한계](diagrams/report_graphs/06_corpus_chars_limit.png)
+
 ---
 
 ## 10. 미세 조정
@@ -594,6 +565,40 @@ Basic fine-tuning 결과는 `sentiment_basic.json`의 마지막 기록을 기준
 | Basic, pretrain 10 epochs | 0.5003 | 0.7517 | 0.4260 | 0.8080 | 0.4337 | 0.8047 |
 
 Light 마지막 재실행에서 test accuracy가 `0.618`에 머문 것은 epoch와 데이터 규모가 부족해 backbone이 충분히 수렴하지 못했을 가능성을 보여준다. Basic에서는 사전 학습 epoch를 `10`으로 늘려 더 많은 update를 수행했고, 이후 sentiment fine-tuning에서 test accuracy가 `0.8047`까지 올라갔다. 따라서 이 결과는 "큰 설정이 무조건 좋다"라기보다, 큰 설정을 사용할 때는 그에 맞는 충분한 학습 epoch가 함께 필요하다는 해석이 더 적절하다.
+
+---
+## 8. 보고서 요약
+
+이 프로젝트의 목표는 PyTorch만 사용해서 mini GPT를 직접 구현하고, NSMC 영화 리뷰 데이터로 사전 학습과 감성 분류 미세 조정을 수행하는 것이다.
+
+
+> Light 설정에서 `model_size`, `learning rate`, `dropout`을 바꿔 보았을 때, 어떤 조합이 감성 분류 성능까지 가장 안정적으로 이어지는가?
+
+실험은 먼저 빠른 비교가 가능한 Light 설정에서 진행했다.
+
+| 단계 | 설정 | 목적 |
+| --- | --- | --- |
+| Smoke | `corpus[:5000]`, `vocab_size=300`, `context_length=32` | BPE와 한 배치 학습 확인 |
+| Light | `corpus[:500000]`, `vocab_size=2000`, `context_length=64` | 여러 하이퍼파라미터 후보를 빠르게 비교 |
+| Basic | `corpus[:1500000]`, `vocab_size=3000`, `context_length=128` | Light에서 고른 조합을 더 큰 설정에 적용 |
+
+최종 선택 기준은 다음 순서로 고정했다.
+
+1. `sentiment validation accuracy`가 높은 조합
+2. validation accuracy가 비슷하면 `sentiment validation loss`가 낮은 조합
+3. 둘 다 비슷하면 더 작은 모델
+
+이 기준으로 Light 실험에서 가장 좋은 선택은 `Model-Base`였다.
+
+| 선택 항목 | 최종 값 |
+| --- | --- |
+| `emb_dim` | 192 |
+| `n_layers` | 4 |
+| `n_heads` | 4 |
+| `drop_rate` | 0.1 |
+| `lr` | 3e-4 |
+
+왜 이 선택을 했는지의 핵심은 단순히 loss 하나만 낮았기 때문이 아니다. 사전 학습 loss가 낮아지는 것과 실제 downstream task인 감성 분류 validation accuracy가 함께 안정적으로 나오는 조합을 우선했다.
 
 ---
 
@@ -644,90 +649,3 @@ Basic 설정에서 모델의 표현 차원을 `192`에서 `256`으로 키운 후
 | fine-tuning epoch | 2~3 epoch, best 기준은 val accuracy 또는 val loss |
 
 특히 `emb_dim=256` 실험에서는 validation loss가 가장 좋았던 step 6200 근처 checkpoint를 sentiment fine-tuning에 사용하는 것이 중요하다. 마지막 checkpoint는 train loss는 낮지만 gap이 커진 상태라 downstream 성능에 불리할 수 있다.
-
----
-
-## 12. 발표용 결론
-
-이번 실험은 하이퍼파라미터를 무작위로 바꾼 것이 아니라, 세 가지 질문을 나누어 확인한 과정이었다.
-
-![발표 요약 그래프](diagrams/report_graphs/07_presentation_summary.png)
-
-1. 모델 크기를 키우면 항상 좋은가?
-2. learning rate를 키우면 더 빨리 좋아지는가?
-3. dropout을 조절하면 일반화 성능이 좋아지는가?
-
-결과적으로 Light 설정에서는 `Model-Base`, `lr=3e-4`, `drop_rate=0.1`이 가장 합리적인 선택이었다.
-
-선택 이유는 다음과 같다.
-
-- Model-Base는 sentiment validation accuracy가 `0.642`로 가장 높았다.
-- 같은 model size 비교에서 validation loss도 `0.6251`로 가장 낮았다.
-- Model-Large는 파라미터 수가 더 크지만 Light 조건에서는 충분히 수렴하지 못했다.
-- LR-High는 빠른 학습을 기대했지만 validation accuracy가 낮았다.
-- Dropout-0.2는 이번 조건에서 underfitting에 가까운 결과를 보였다.
-- Basic에서는 epoch를 `10`으로 늘려 3 epoch에서 부족했던 수렴을 보완했고, sentiment test accuracy가 `0.8047`까지 올라갔다.
-- 후속 `emb_dim=256` 실험은 train loss를 더 낮췄지만 train-val gap이 커지고 sentiment accuracy가 낮아져, 최종 선택은 `emb_dim=192`가 더 타당했다.
-
-따라서 최종 실험 전략은 다음과 같이 정리할 수 있다.
-
-```text
-Smoke로 구현 확인
--> Light로 model_size, lr, dropout 후보 비교
--> sentiment validation accuracy 기준으로 Model-Base 선택
--> 선택한 조합을 Basic 설정에 확장 적용
--> Basic에서는 epoch를 10으로 늘려 충분한 수렴을 유도
-```
-
-이 흐름의 장점은 실험 비용을 줄이면서도 선택 이유를 설명할 수 있다는 점이다. 처음부터 Basic에서 모든 후보를 돌리면 시간이 오래 걸리고, 반대로 Light 결과만 보면 최종 제출 설정과 거리가 있다. 그래서 Light는 탐색용, Basic은 확장 검증용으로 역할을 나누었다.
-
----
-
-## 13. 한계와 개선 방향
-
-### 13.1 실험 한계
-
-- 일부 실험의 epoch 수가 다르다. 특히 Model-Large와 LR-High는 1 epoch 결과라 3 epoch 실험과 직접 비교하기 어렵다.
-- dropout 실험은 JSON 기준 `emb_dim=128`, `n_layers=4`로 되어 있어 Base 설정과 완전히 같은 통제 실험이 아니었다.
-- 학습 시간은 JSON에 저장되어 있지 않아 정량 비교를 할 수 없었다.
-- Basic sentiment 결과는 Light와 데이터 크기, epoch 수가 함께 달라졌으므로, accuracy 상승의 원인을 epoch 증가 하나로만 단정하기는 어렵다.
-- 현재 LM train corpus는 1,379,486자이므로, 추가 데이터 없이 `corpus_chars`만 5,000,000으로 올려도 실제 학습 데이터가 500만 자로 늘어나지는 않는다.
-- 생성 샘플 decode 오류는 학습 실패가 아니라 logging 단계의 UTF-8 복원 문제였지만, 처음에는 학습 중단처럼 보일 수 있었다.
-
-### 13.2 개선 방향
-
-- 모든 후보를 같은 epoch 수와 같은 seed로 다시 실행하면 더 공정한 비교가 가능하다.
-- 결과 JSON에 `lr`, `batch_size`, `training_time`, `seed`를 함께 저장하면 발표와 재현성이 좋아진다.
-- validation loss가 가장 낮은 checkpoint를 저장한 뒤 sentiment fine-tuning에 사용하는 방식으로 downstream 성능을 더 안정화할 수 있다.
-- learning rate warmup, cosine decay, gradient clipping을 추가하면 LR-High처럼 큰 update를 쓰는 실험도 더 안정적으로 비교할 수 있다.
-- `emb_dim=256`처럼 모델을 키우는 실험에서는 dropout, learning rate, early stopping, best checkpoint 기준을 함께 조정해야 한다.
-- 더 큰 `corpus_chars` 실험을 하려면 단순 slice 값을 키우는 것이 아니라, 실제 추가 학습 corpus를 확보해야 한다.
-- 생성 샘플 저장은 `errors="replace"`처럼 안전한 decode 경로를 사용해, sample 출력 실패가 학습 결과 저장 실패로 이어지지 않게 해야 한다.
-
----
-
-## 14. 최종 정리
-
-이번 프로젝트에서 가장 중요한 학습 포인트는 GPT의 component를 직접 구현하는 것과, 실험 결과를 기준을 세워 해석하는 것이다.
-
-처음에는 `lr`, `drop_rate`, `model_size`를 바꿔 보는 것이 단순 튜닝처럼 보일 수 있다. 하지만 실험 축을 나누고, 각 축마다 가설을 세우고, 같은 기준으로 결과를 비교하면 다음과 같은 결론을 낼 수 있다.
-
-> 이번 mini GPT에서는 Light 설정 기준으로 너무 작은 모델은 표현력이 부족하고, 너무 큰 모델은 제한된 학습 조건에서 충분히 수렴하지 못했다. 또한 learning rate와 dropout은 극단적인 값보다 중간값이 validation 성능에서 안정적이었다. 그래서 `emb_dim=192`, `n_layers=4`, `lr=3e-4`, `drop_rate=0.1`을 최종 조합으로 선택했고, 이를 Basic 설정에 확장 적용했다. Basic에서는 epoch를 `10`으로 늘려 충분한 수렴을 유도했다. 이후 `emb_dim=256`도 검증했지만, train loss만 더 낮아지고 sentiment accuracy는 오히려 떨어졌으므로 현재 결과에서는 `emb_dim=192`가 더 좋은 최종 선택이다.
-
----
-
-## 15. 발표용 그래프
-
-발표 슬라이드에는 아래 그래프를 순서대로 사용하면 된다.
-
-| 그래프 | 파일 | 발표에서 말할 핵심 |
-| --- | --- | --- |
-| Light validation accuracy 비교 | `diagrams/report_graphs/01_light_sentiment_val_accuracy.png` | 최종 기준을 sentiment validation accuracy로 두었고, Model-Base가 Light 후보 중 가장 안정적이었다. |
-| Light loss 비교 | `diagrams/report_graphs/02_light_loss_comparison.png` | LM loss만이 아니라 sentiment validation loss까지 함께 봐야 한다. |
-| Light vs Basic sentiment accuracy | `diagrams/report_graphs/03_basic_sentiment_accuracy.png` | Light에서 고른 설정을 Basic으로 확장하고 epoch를 늘리자 downstream 성능이 크게 좋아졌다. |
-| Basic pretraining loss curve | `diagrams/report_graphs/04_basic_pretrain_loss_curves.png` | `emb_dim=256`은 train loss를 더 낮췄지만 validation loss 개선은 거의 없었다. |
-| `emb_dim` 일반화 gap | `diagrams/report_graphs/05_emb_dim_generalization_gap.png` | 큰 모델은 train-val gap이 커졌고 sentiment validation accuracy는 오히려 낮아졌다. |
-| `corpus_chars` 한계 | `diagrams/report_graphs/06_corpus_chars_limit.png` | 실제 train corpus가 약 138만 자라서 slice 값만 500만으로 키워도 실제 데이터가 늘지 않는다. |
-| 발표 요약 1장 | `diagrams/report_graphs/07_presentation_summary.png` | 모델 크기, lr, Basic 확장, 256 과적합 신호를 한 장으로 요약한다. |
-
-그래프의 원본 수치 요약은 `diagrams/report_graphs/graph_data_summary.json`에 저장했다. 발표 중 질문이 들어오면 이 파일의 값을 기준으로 다시 확인할 수 있다.
