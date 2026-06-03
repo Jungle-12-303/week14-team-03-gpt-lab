@@ -6,10 +6,12 @@
 
 import sys
 import tempfile
+import json
 from pathlib import Path
 
 import pytest
 import torch
+from torch.utils.data import DataLoader
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -75,6 +77,49 @@ class TestMakeSentimentDataset:
         assert set(train_data[0].keys()) == {"text", "label"}
         assert train_data[0]["label"] in {0, 1}
 
+    def test_make_sentiment_dataset_writes_required_jsonl_files(self):
+        """output_dir 지정 시 과제 요구 파일명과 JSONL 형식으로 저장하는지 확인한다."""
+        from finetune import make_sentiment_dataset
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            train_path = tmp_path / "ratings_train.txt"
+            test_path = tmp_path / "ratings_test.txt"
+            output_dir = tmp_path / "prepared"
+
+            train_path.write_text(
+                "id\tdocument\tlabel\n"
+                "1\t정말 좋았다\t1\n"
+                "2\t별로였다\t0\n"
+                "3\t다시 보고 싶다\t1\n",
+                encoding="utf-8",
+            )
+            test_path.write_text(
+                "id\tdocument\tlabel\n"
+                "4\t괜찮았다\t1\n",
+                encoding="utf-8",
+            )
+
+            make_sentiment_dataset(
+                train_path,
+                test_path,
+                val_ratio=0.34,
+                seed=42,
+                output_dir=output_dir,
+            )
+
+            train_jsonl = output_dir / "nsmc_sentiment_train.jsonl"
+            val_jsonl = output_dir / "nsmc_sentiment_val.jsonl"
+            test_jsonl = output_dir / "nsmc_sentiment_test.jsonl"
+
+            assert train_jsonl.exists()
+            assert val_jsonl.exists()
+            assert test_jsonl.exists()
+            assert not (output_dir / "train.json").exists()
+
+            first_line = train_jsonl.read_text(encoding="utf-8").splitlines()[0]
+            assert set(json.loads(first_line).keys()) == {"text", "label"}
+
 
 class TestReviewSentimentDataset:
     """ReviewSentimentDataset 구현 후 실행."""
@@ -121,3 +166,57 @@ class TestSentimentTrainEval:
 
         assert callable(train_epoch_sentiment)
         assert callable(evaluate_sentiment)
+
+    def test_train_eval_save_sentiment_history(self):
+        """results_path 지정 시 epoch별 train/val loss와 accuracy가 JSON history에 저장되는지 확인한다."""
+        from model import GPTModel
+        from finetune import (
+            GPTForSequenceClassification,
+            ReviewSentimentDataset,
+            train_epoch_sentiment,
+            evaluate_sentiment,
+        )
+
+        data = [
+            {"text": "정말 좋았다", "label": 1},
+            {"text": "별로였다", "label": 0},
+        ]
+        dataset = ReviewSentimentDataset(data, DummyTokenizer(), max_length=8)
+        loader = DataLoader(dataset, batch_size=2, shuffle=False)
+        backbone = GPTModel(GPT_CONFIG_TINY)
+        model = GPTForSequenceClassification(backbone, num_labels=2)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+        device = torch.device("cpu")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            results_path = Path(tmp) / "sentiment_history.json"
+            for epoch in range(1, 3):
+                train_epoch_sentiment(
+                    model,
+                    loader,
+                    optimizer,
+                    device,
+                    epoch=epoch,
+                    results_path=results_path,
+                )
+                evaluate_sentiment(
+                    model,
+                    loader,
+                    device,
+                    split="val",
+                    epoch=epoch,
+                    results_path=results_path,
+                )
+
+            payload = json.loads(results_path.read_text(encoding="utf-8"))
+
+        assert payload["task"] == "sentiment_classification"
+        assert [item["split"] for item in payload["history"]] == ["train", "val", "train", "val"]
+        assert {"loss", "accuracy", "num_examples"} <= set(payload["history"][0])
+        assert [row["epoch"] for row in payload["epoch_history"]] == [1, 2]
+        assert {
+            "train_loss",
+            "train_accuracy",
+            "val_loss",
+            "val_accuracy",
+        } <= set(payload["epoch_history"][0])

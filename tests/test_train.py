@@ -6,6 +6,7 @@
 
 import sys
 import tempfile
+import json
 from pathlib import Path
 
 import torch
@@ -26,6 +27,30 @@ GPT_CONFIG_SMALL = {
     "drop_rate": 0.0,
     "qkv_bias": False,
 }
+
+
+GPT_CONFIG_TINY = {
+    "vocab_size": 100,
+    "context_length": 8,
+    "emb_dim": 16,
+    "n_heads": 4,
+    "n_layers": 1,
+    "drop_rate": 0.0,
+    "qkv_bias": False,
+}
+
+
+class SafeTokenizer:
+    """학습 history 저장 테스트에서 생성 결과를 안전하게 문자열로 바꾸는 tokenizer."""
+
+    def encode(self, text):
+        return [1, 2, 3]
+
+    def decode(self, ids, skip_special=True, errors="strict"):
+        return "tokens:" + ",".join(str(token_id) for token_id in ids)
+
+    def get_eos_id(self):
+        return None
 
 
 # =============================================================================
@@ -85,6 +110,29 @@ class TestCalcLossLoader:
             avg_loss = avg_loss.item()
         assert avg_loss >= 0
 
+    def test_calc_loss_loader_restores_original_model_mode(self):
+        """평가 loss 계산 뒤에도 호출 전 train/eval 모드가 유지되는지 확인한다."""
+        from model import GPTModel
+        from train import calc_loss_loader
+        from dataset import create_dataloader
+
+        loader = create_dataloader(
+            list(range(200)),
+            context_length=16,
+            batch_size=4,
+            shuffle=False,
+        )
+        model = GPTModel(GPT_CONFIG_SMALL)
+        device = torch.device("cpu")
+
+        model.train()
+        calc_loss_loader(loader, model, device, num_batches=1)
+        assert model.training is True
+
+        model.eval()
+        calc_loss_loader(loader, model, device, num_batches=1)
+        assert model.training is False
+
 
 # =============================================================================
 # save_checkpoint / load_checkpoint
@@ -141,6 +189,61 @@ class TestGenerate:
         except NotImplementedError:
             pytest.fail("generate 미구현")
         assert out.shape == (1, 4 + 5)
+
+
+# =============================================================================
+# train_model results_path
+# =============================================================================
+
+
+class TestTrainModelResults:
+    """train_model이 학습 결과를 JSON 파일로 저장하는지 확인."""
+
+    def test_train_model_saves_pretraining_history(self):
+        """results_path 지정 시 epoch loss, eval loss, 생성 샘플을 JSON에 남기는지 확인한다."""
+        from model import GPTModel
+        from train import train_model
+        from dataset import create_dataloader
+
+        train_loader = create_dataloader(
+            list(range(50)),
+            context_length=GPT_CONFIG_TINY["context_length"],
+            batch_size=2,
+            shuffle=False,
+        )
+        val_loader = create_dataloader(
+            list(range(50)),
+            context_length=GPT_CONFIG_TINY["context_length"],
+            batch_size=2,
+            shuffle=False,
+        )
+        model = GPTModel(GPT_CONFIG_TINY)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+        device = torch.device("cpu")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            results_path = Path(tmp) / "pretrain_history.json"
+            train_model(
+                model=model,
+                train_loader=train_loader,
+                val_loader=val_loader,
+                optimizer=optimizer,
+                device=device,
+                num_epochs=1,
+                eval_freq=1,
+                eval_iter=1,
+                start_context="시작",
+                tokenizer=SafeTokenizer(),
+                results_path=results_path,
+            )
+
+            payload = json.loads(results_path.read_text(encoding="utf-8"))
+
+        assert payload["task"] == "pretraining"
+        assert len(payload["train_losses"]) == 1
+        assert payload["eval_history"]
+        assert "val_loss" in payload["eval_history"][0]
+        assert payload["eval_history"][0]["generated_sample"].startswith("tokens:")
 
 
 # =============================================================================

@@ -16,6 +16,70 @@ except ImportError:
     from model import GPTModel
 
 
+def append_sentiment_result(path: str | Path, result: dict) -> None:
+    """감성 분류 train/eval 결과를 JSON history 파일에 누적 저장합니다."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            history = json.load(f)
+    else:
+        history = {
+            "task": "sentiment_classification",
+            "history": [],
+            "epoch_history": [],
+        }
+
+    history.setdefault("history", [])
+    history.setdefault("epoch_history", [])
+
+    # epoch 번호가 있는 결과는 같은 split/epoch를 다시 실행했을 때 중복 append하지 않고 교체합니다.
+    # 노트북 셀을 다시 실행해도 sentiment_<preset>.json이 epoch 1, 1, 1...처럼 불어나지 않습니다.
+    result_epoch = result.get("epoch")
+    result_split = result.get("split")
+    if result_epoch is not None and result_split is not None:
+        insert_idx = None
+        deduped_history = []
+        for item in history["history"]:
+            same_result = item.get("epoch") == result_epoch and item.get("split") == result_split
+            if same_result:
+                if insert_idx is None:
+                    insert_idx = len(deduped_history)
+                continue
+            deduped_history.append(item)
+
+        if insert_idx is None:
+            deduped_history.append(result)
+        else:
+            deduped_history.insert(insert_idx, result)
+
+        history["history"] = deduped_history
+    else:
+        # train_epoch_sentiment와 evaluate_sentiment를 번갈아 호출해도 같은 파일에 순서대로 쌓입니다.
+        # 예: {"split": "train", ...}, {"split": "val", ...}, {"split": "test", ...}
+        history["history"].append(result)
+
+    epoch_rows = {}
+    for item in history["history"]:
+        item_epoch = item.get("epoch")
+        item_split = item.get("split")
+        if item_epoch is None or item_split is None:
+            continue
+
+        epoch_row = epoch_rows.setdefault(item_epoch, {"epoch": item_epoch})
+        epoch_row[f"{item_split}_loss"] = item.get("loss")
+        epoch_row[f"{item_split}_accuracy"] = item.get("accuracy")
+        epoch_row[f"{item_split}_num_examples"] = item.get("num_examples")
+
+    history["epoch_history"] = [
+        epoch_rows[epoch] for epoch in sorted(epoch_rows)
+    ]
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+
 def make_sentiment_dataset(
     train_tsv_path: str | Path,
     test_tsv_path: str | Path | None = None,
@@ -29,6 +93,14 @@ def make_sentiment_dataset(
     반환 형식:
         [{"text": "리뷰", "label": 0 또는 1}, ...]
     """
+    def write_jsonl(path: str | Path, rows: list[dict]) -> None:
+        """감성 분류 제출 형식인 JSONL로 한 줄에 샘플 하나씩 저장합니다."""
+        with open(path, "w", encoding="utf-8") as f:
+            for row in rows:
+                # json.dump로 전체 배열을 저장하면 요구서의 .jsonl 형식과 달라집니다.
+                # JSONL은 큰 데이터도 줄 단위로 읽기 쉬우므로 train/val/test 파일에 적합합니다.
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
     def read_nsmc_tsv(path: str | Path) -> list[dict]:
         rows = []
 
@@ -73,12 +145,11 @@ def make_sentiment_dataset(
         output_dir.mkdir(parents=True, exist_ok=True)
 
         for name, data in [
-            ("train.json", train_data),
-            ("val.json", val_data),
-            ("test.json", test_data),
+            ("nsmc_sentiment_train.jsonl", train_data),
+            ("nsmc_sentiment_val.jsonl", val_data),
+            ("nsmc_sentiment_test.jsonl", test_data),
         ]:
-            with open(output_dir / name, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            write_jsonl(output_dir / name, data)
 
     return train_data, val_data, test_data
     # raise NotImplementedError("make_sentiment_dataset을 구현하세요.")
@@ -185,6 +256,9 @@ def train_epoch_sentiment(
     train_loader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
+    *,
+    epoch: int | None = None,
+    results_path: str | Path | None = None,
 ) -> tuple[float, float]:
     """TODO: 감성 분류 모델을 1 epoch 훈련하고 (평균 loss, accuracy)를 반환합니다."""
     model.train()
@@ -214,6 +288,18 @@ def train_epoch_sentiment(
     avg_loss = total_loss / total_count if total_count > 0 else float("nan")
     accuracy = total_correct / total_count if total_count > 0 else float("nan")
 
+    if results_path is not None:
+        append_sentiment_result(
+            results_path,
+            {
+                "split": "train",
+                "epoch": epoch,
+                "loss": avg_loss,
+                "accuracy": accuracy,
+                "num_examples": total_count,
+            },
+        )
+
     return avg_loss, accuracy
     # raise NotImplementedError("train_epoch_sentiment를 구현하세요.")
 
@@ -222,6 +308,10 @@ def evaluate_sentiment(
     model: GPTForSequenceClassification,
     data_loader,
     device: torch.device,
+    *,
+    split: str = "val",
+    epoch: int | None = None,
+    results_path: str | Path | None = None,
 ) -> tuple[float, float]:
     """TODO: 감성 분류 모델을 평가하고 (평균 loss, accuracy)를 반환합니다."""
     model.eval()
@@ -246,6 +336,18 @@ def evaluate_sentiment(
 
     avg_loss = total_loss / total_count if total_count > 0 else float("nan")
     accuracy = total_correct / total_count if total_count > 0 else float("nan")
+
+    if results_path is not None:
+        append_sentiment_result(
+            results_path,
+            {
+                "split": split,
+                "epoch": epoch,
+                "loss": avg_loss,
+                "accuracy": accuracy,
+                "num_examples": total_count,
+            },
+        )
 
     return avg_loss, accuracy
     # raise NotImplementedError("evaluate_sentiment를 구현하세요.")
