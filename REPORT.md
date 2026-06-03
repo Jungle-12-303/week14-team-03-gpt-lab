@@ -64,6 +64,8 @@ Basic 확장에서는 먼저 Light 실험에서 validation accuracy가 높았던
 | --- | --- | --- |
 | `./.venv/bin/python -m pytest tests/ -q` | `34 passed, 1 warning` | `plot_losses`의 non-interactive canvas warning 1개 |
 
+- plot_losses() 함수가 마지막에 plt.show()로 그래프 창을 띄우려고 하는데, pytest 실행 환경은 GUI 창을 띄우는 대화형 환경이 아니라서 그래프를 화면에 보여줄 수 없다는 경고
+
 ---
 
 ## 3. 데이터
