@@ -28,11 +28,53 @@ def append_sentiment_result(path: str | Path, result: dict) -> None:
         history = {
             "task": "sentiment_classification",
             "history": [],
+            "epoch_history": [],
         }
 
-    # train_epoch_sentiment와 evaluate_sentiment를 번갈아 호출해도 같은 파일에 순서대로 쌓입니다.
-    # 예: {"split": "train", ...}, {"split": "val", ...}, {"split": "test", ...}
-    history["history"].append(result)
+    history.setdefault("history", [])
+    history.setdefault("epoch_history", [])
+
+    # epoch 번호가 있는 결과는 같은 split/epoch를 다시 실행했을 때 중복 append하지 않고 교체합니다.
+    # 노트북 셀을 다시 실행해도 sentiment_<preset>.json이 epoch 1, 1, 1...처럼 불어나지 않습니다.
+    result_epoch = result.get("epoch")
+    result_split = result.get("split")
+    if result_epoch is not None and result_split is not None:
+        insert_idx = None
+        deduped_history = []
+        for item in history["history"]:
+            same_result = item.get("epoch") == result_epoch and item.get("split") == result_split
+            if same_result:
+                if insert_idx is None:
+                    insert_idx = len(deduped_history)
+                continue
+            deduped_history.append(item)
+
+        if insert_idx is None:
+            deduped_history.append(result)
+        else:
+            deduped_history.insert(insert_idx, result)
+
+        history["history"] = deduped_history
+    else:
+        # train_epoch_sentiment와 evaluate_sentiment를 번갈아 호출해도 같은 파일에 순서대로 쌓입니다.
+        # 예: {"split": "train", ...}, {"split": "val", ...}, {"split": "test", ...}
+        history["history"].append(result)
+
+    epoch_rows = {}
+    for item in history["history"]:
+        item_epoch = item.get("epoch")
+        item_split = item.get("split")
+        if item_epoch is None or item_split is None:
+            continue
+
+        epoch_row = epoch_rows.setdefault(item_epoch, {"epoch": item_epoch})
+        epoch_row[f"{item_split}_loss"] = item.get("loss")
+        epoch_row[f"{item_split}_accuracy"] = item.get("accuracy")
+        epoch_row[f"{item_split}_num_examples"] = item.get("num_examples")
+
+    history["epoch_history"] = [
+        epoch_rows[epoch] for epoch in sorted(epoch_rows)
+    ]
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)

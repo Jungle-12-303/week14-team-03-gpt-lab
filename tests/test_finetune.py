@@ -168,7 +168,7 @@ class TestSentimentTrainEval:
         assert callable(evaluate_sentiment)
 
     def test_train_eval_save_sentiment_history(self):
-        """results_path 지정 시 train/val loss와 accuracy가 같은 JSON history에 누적되는지 확인한다."""
+        """results_path 지정 시 epoch별 train/val loss와 accuracy가 JSON history에 저장되는지 확인한다."""
         from model import GPTModel
         from finetune import (
             GPTForSequenceClassification,
@@ -190,25 +190,33 @@ class TestSentimentTrainEval:
 
         with tempfile.TemporaryDirectory() as tmp:
             results_path = Path(tmp) / "sentiment_history.json"
-            train_epoch_sentiment(
-                model,
-                loader,
-                optimizer,
-                device,
-                epoch=1,
-                results_path=results_path,
-            )
-            evaluate_sentiment(
-                model,
-                loader,
-                device,
-                split="val",
-                epoch=1,
-                results_path=results_path,
-            )
+            for epoch in range(1, 3):
+                train_epoch_sentiment(
+                    model,
+                    loader,
+                    optimizer,
+                    device,
+                    epoch=epoch,
+                    results_path=results_path,
+                )
+                evaluate_sentiment(
+                    model,
+                    loader,
+                    device,
+                    split="val",
+                    epoch=epoch,
+                    results_path=results_path,
+                )
 
             payload = json.loads(results_path.read_text(encoding="utf-8"))
 
         assert payload["task"] == "sentiment_classification"
-        assert [item["split"] for item in payload["history"]] == ["train", "val"]
+        assert [item["split"] for item in payload["history"]] == ["train", "val", "train", "val"]
         assert {"loss", "accuracy", "num_examples"} <= set(payload["history"][0])
+        assert [row["epoch"] for row in payload["epoch_history"]] == [1, 2]
+        assert {
+            "train_loss",
+            "train_accuracy",
+            "val_loss",
+            "val_accuracy",
+        } <= set(payload["epoch_history"][0])
