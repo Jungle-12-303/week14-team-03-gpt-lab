@@ -148,7 +148,7 @@ Basic 확장에서는 먼저 Light 실험에서 validation accuracy가 높았던
 | 학습 corpus 크기 | (`corpus[:1_500_000]`) |
 | 어휘 학습 시간 | () |
 | vocabulary 저장 경로 | `data/vocab_light_2000.json` | `data/vocab_basic_3000.json` |
-| 인코딩/디코딩 복원 예시 | (예: `decode(encode("이 영화는 좋았다")) == 원문`) 생각해보고|
+| 인코딩/디코딩 복원 예시 | (예: `decode(encode("이 영화는 좋았다")) == 원문`)|
 
 
 BPE는 UTF-8 byte-level 방식으로 구현했다. 한국어는 한 글자가 UTF-8에서 여러 byte로 표현되기 때문에, 글자 단위나 공백 단위로 먼저 자르면 처음 보는 어미와 조사에서 `<unk>`가 많이 생길 수 있다. byte-level BPE를 쓰면 모든 한글, 영어, 숫자, 문장부호를 최소한 byte 단위로 표현할 수 있고, 자주 붙는 byte sequence만 merge하면서 vocabulary를 확장할 수 있다.
