@@ -1,0 +1,41 @@
+{
+  "Small": {
+    "emb_dim": 128,
+    "n_layers": 2,
+    "epochs": 3,
+    "params_m": 0.92,
+    "last_step": 1905,
+    "last_val_loss": 5.959245872497559,
+    "last_train_loss": 5.834114456176758,
+    "sent_val_acc": 0.634,
+    "sent_test_acc": 0.607,
+    "sent_val_loss": 0.6467223553657532,
+    "sent_test_loss": 0.6574276261329651
+  },
+  "Base": {
+    "emb_dim": 192,
+    "n_layers": 4,
+    "epochs": 3,
+    "params_m": 2.56,
+    "last_step": 1905,
+    "last_val_loss": 5.452703619003296,
+    "last_train_loss": 5.256286859512329,
+    "sent_val_acc": 0.642,
+    "sent_test_acc": 0.645,
+    "sent_val_loss": 0.625077056646347,
+    "sent_test_loss": 0.6199453461170197
+  },
+  "Large": {
+    "emb_dim": 256,
+    "n_layers": 4,
+    "epochs": 3,
+    "params_m": 4.2,
+    "last_step": 1914,
+    "last_val_loss": 5.336008167266845,
+    "last_train_loss": 4.94581241607666,
+    "sent_val_acc": 0.682,
+    "sent_test_acc": 0.686,
+    "sent_val_loss": 0.7332613579630852,
+    "sent_test_loss": 0.708705239892006
+  }
+}
